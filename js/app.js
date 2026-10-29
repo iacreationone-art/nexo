@@ -1,5 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/+esm'
 import { SUPABASE_URL, SUPABASE_ANON_KEY, VAPID_PUBLIC_KEY } from './config.js'
+import * as cripto from './cripto.js'
 
 const $ = (id) => document.getElementById(id)
 const configured = !SUPABASE_URL.includes('SEU-PROJETO') && !SUPABASE_ANON_KEY.includes('SUA_ANON_KEY')
@@ -20,11 +21,15 @@ const state = {
   pendingOpen: new URLSearchParams(location.search).get('c'),
   contact: null,      // dados do contato da conversa aberta (contact_card)
   phone: null,        // meu telefone { phone, visible }
+  myKey: null,        // minha chave privada (CryptoKey) — só existe neste aparelho
+  myPublic: null,     // minha chave pública (JWK)
 }
+const keyCache = new Map()  // id da chave da conversa -> CryptoKey, ou null se ainda não recebi
+const sendKeys = new Map()  // id da conversa -> { keyId, key } usada para enviar
 let tmpSeq = 0
 let listTimer = null
 
-const MSG_COLS = 'id, conversation_id, sender_id, body, created_at, read_at, attachment_path, attachment_name, attachment_type, attachment_size'
+const MSG_COLS = 'id, conversation_id, sender_id, body, ciphertext, key_id, created_at, read_at, attachment_path, attachment_name, attachment_type, attachment_size'
 const MAX_FILE = 20 * 1024 * 1024
 
 // ---------- Utilidades ----------
@@ -200,9 +205,11 @@ async function handleSession(session) {
 async function startApp() {
   show('app')
   await loadProfile()
+  if (!(await setupKeys())) return
   await loadConversations()
   subscribeRealtime()
   syncPush()
+  shareMissingKeys()
   if (state.pendingOpen) {
     openById(state.pendingOpen)
     state.pendingOpen = null
@@ -216,8 +223,11 @@ function teardown() {
   Object.assign(state, {
     user: null, profile: null, conversations: [], current: null, msgs: [],
     online: new Set(), dbChannel: null, presence: null, typingChannel: null,
-    contact: null, phone: null,
+    contact: null, phone: null, myKey: null, myPublic: null,
   })
+  keyCache.clear()
+  sendKeys.clear()
+  for (const hit of urlCache.values()) if (hit.blob) URL.revokeObjectURL(hit.url)
   urlCache.clear()
   $('conv-list').replaceChildren()
 }
@@ -232,6 +242,269 @@ async function loadProfile() {
   state.phone = phone || null
 }
 
+// ---------- Criptografia de ponta a ponta ----------
+// Regras e formato em js/cripto.js e supabase/cripto.sql.
+
+function useIdentity({ privateKey, publicJwk }) {
+  state.myKey = privateKey
+  state.myPublic = publicJwk
+}
+
+async function storeIdentity(identity) {
+  try {
+    await cripto.localClear()
+    await cripto.localSet('me', { userId: state.user.id, privateKey: identity.privateKey, publicJwk: identity.publicJwk })
+  } catch (err) {
+    console.error('chaves', err) // navegação privada: a chave vale só enquanto o app estiver aberto
+  }
+  useIdentity(identity)
+}
+
+// Garante que este aparelho tem minha chave: usa a guardada ou pede a senha de recuperação
+// (na primeira vez, pede para criar uma). Devolve false se a pessoa preferiu sair da conta.
+async function setupKeys() {
+  let local = await cripto.localGet('me').catch(() => null)
+  if (local && local.userId !== state.user.id) {
+    await cripto.localClear().catch(() => {})
+    local = null
+  }
+  const { data: mine, error } = await supabase.from('user_keys').select('public_key').eq('user_id', state.user.id).maybeSingle()
+  if (error) {
+    console.error(error)
+    if (local) useIdentity(local) // sem internet: segue com a chave deste aparelho
+    return true
+  }
+  if (local && cripto.sameKey(local.publicJwk, mine?.public_key)) {
+    useIdentity(local)
+    return true
+  }
+  return askKeys(mine ? 'unlock' : 'create', mine?.public_key)
+}
+
+const KEYS_TEXT = {
+  create: {
+    title: 'Proteja suas conversas',
+    text: 'Agora suas mensagens são criptografadas de ponta a ponta: só você e a pessoa com quem conversa conseguem ler. ' +
+      'Crie uma senha de recuperação. Ela serve para abrir suas conversas se você trocar de celular. ' +
+      'Anote num lugar seguro: ninguém consegue recuperar essa senha, nem o Nexo.',
+    submit: 'Criar senha',
+  },
+  unlock: {
+    title: 'Digite sua senha de recuperação',
+    text: 'Para ler suas conversas neste aparelho, digite a senha de recuperação que você criou.',
+    submit: 'Abrir conversas',
+    other: 'Esqueci a senha',
+  },
+  reset: {
+    title: 'Criar uma senha nova',
+    text: 'Com uma senha nova, as mensagens antigas não abrem mais. Você só vai ler as mensagens que chegarem daqui em diante.',
+    submit: 'Criar senha nova',
+    other: 'Lembrei a senha',
+  },
+}
+let keysMode = 'create'
+let keysPublic = null
+let keysDone = null
+
+function askKeys(mode, publicJwk) {
+  keysPublic = publicJwk
+  setKeysMode(mode)
+  $('keys-dialog').showModal()
+  return new Promise((resolve) => (keysDone = resolve))
+}
+
+function setKeysMode(mode) {
+  keysMode = mode
+  const t = KEYS_TEXT[mode]
+  const isNew = mode !== 'unlock'
+  $('keys-title').textContent = t.title
+  $('keys-text').textContent = t.text
+  $('keys-submit').textContent = t.submit
+  $('keys-other').textContent = t.other || ''
+  $('keys-other').hidden = !t.other
+  $('keys-confirm-label').hidden = !isNew
+  $('keys-confirm').required = isNew
+  $('keys-pass').autocomplete = isNew ? 'new-password' : 'current-password'
+  $('keys-pass').value = ''
+  $('keys-confirm').value = ''
+  setMsg($('keys-msg'), '')
+}
+
+function finishKeys(ok) {
+  $('keys-dialog').close()
+  keysDone?.(ok)
+  keysDone = null
+}
+
+$('keys-dialog').addEventListener('cancel', (e) => e.preventDefault()) // não fecha com Esc/voltar
+
+$('keys-other').addEventListener('click', () => {
+  if (keysMode === 'reset') return setKeysMode('unlock')
+  if (confirm('Sem a senha, as mensagens antigas não podem ser abertas. Criar uma senha nova?')) setKeysMode('reset')
+})
+
+$('keys-logout').addEventListener('click', async () => {
+  finishKeys(false)
+  await cripto.localClear().catch(() => {})
+  await supabase.auth.signOut()
+})
+
+$('keys-form').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const pass = $('keys-pass').value
+  if (keysMode !== 'unlock') {
+    if (pass.length < 8) return setMsg($('keys-msg'), 'Use pelo menos 8 caracteres.', true)
+    if (pass !== $('keys-confirm').value) return setMsg($('keys-msg'), 'As duas senhas não são iguais.', true)
+  }
+  const btn = $('keys-submit')
+  btn.disabled = true
+  setMsg($('keys-msg'), keysMode === 'unlock' ? 'Abrindo…' : 'Protegendo suas conversas…')
+  try {
+    if (keysMode === 'unlock') {
+      const { data: backup, error } = await supabase
+        .from('user_key_backups').select('private_backup, salt, iterations').eq('user_id', state.user.id).single()
+      if (error) throw error
+      const privateKey = await cripto.restoreIdentity(pass, backup).catch(() => {
+        throw new Error('Senha incorreta.')
+      })
+      await storeIdentity({ privateKey, publicJwk: keysPublic })
+    } else {
+      const identity = await cripto.createIdentity(pass)
+      const { error } = await supabase.rpc('set_my_keys', {
+        p_public: identity.publicJwk,
+        p_backup: identity.backup,
+        p_salt: identity.salt,
+        p_iterations: identity.iterations,
+        p_replace: keysMode === 'reset',
+      })
+      if (error) throw error
+      await storeIdentity(identity)
+    }
+    finishKeys(true)
+  } catch (err) {
+    setMsg($('keys-msg'), err.message, true)
+  } finally {
+    btn.disabled = false
+  }
+})
+
+// Minha cópia da chave de uma conversa, desembrulhada (bytes), ou null se ainda não recebi.
+async function myRawKey(keyId) {
+  if (!state.myKey) return null
+  const { data } = await supabase
+    .from('conversation_keys')
+    .select('conversation_id, wrapped_key, wrapper_public')
+    .eq('key_id', keyId)
+    .eq('user_id', state.user.id)
+    .maybeSingle()
+  if (!data) return null
+  try {
+    return await cripto.unwrapConversationKey(data.wrapped_key, state.myKey, data.wrapper_public, data.conversation_id)
+  } catch (err) {
+    console.error('chave', err)
+    return null
+  }
+}
+
+// Chave de uma conversa pronta para usar. Fica guardada no aparelho (o sw.js usa nas notificações).
+function getKey(keyId) {
+  if (!keyCache.has(keyId)) {
+    const p = (async () => {
+      const local = await cripto.localGet('key:' + keyId).catch(() => null)
+      if (local) return local
+      const raw = await myRawKey(keyId)
+      if (!raw) return null
+      const key = await cripto.importConversationKey(raw)
+      cripto.localSet('key:' + keyId, key).catch(() => {})
+      return key
+    })()
+    keyCache.set(keyId, p)
+    p.then((key) => key || keyCache.delete(keyId), () => keyCache.delete(keyId)) // sem chave: tenta de novo depois
+  }
+  return keyCache.get(keyId).catch(() => null)
+}
+
+// Abre uma mensagem cifrada (texto e nome do arquivo). Sem a chave, ela fica "trancada".
+async function openMessage(m) {
+  if (!m.ciphertext) return
+  try {
+    const key = await getKey(m.key_id)
+    if (!key) throw new Error('sem chave')
+    const p = await cripto.decryptMessage(key, m.conversation_id, m.ciphertext)
+    m.body = p.t ?? null
+    if (p.n) m.attachment_name = p.n
+    m.locked = false
+  } catch {
+    m.locked = true
+  }
+}
+
+// Chave para enviar nesta conversa. Cria uma nova quando precisa (primeira mensagem,
+// ou alguém trocou de senha) e entrega para os outros participantes.
+async function sendKeyFor(convId) {
+  const hit = sendKeys.get(convId)
+  if (hit) return hit
+  if (!state.myKey) throw new Error('este aparelho ainda não tem sua chave. Feche e abra o Nexo de novo.')
+
+  const { data, error } = await supabase.rpc('conversation_key_state', { p_conv: convId })
+  if (error) throw error
+  const st = data?.[0]
+  let keyId = st?.key_id
+  let key = keyId && !st.needs_new ? await getKey(keyId) : null
+
+  if (!key) {
+    const raw = cripto.newConversationKey()
+    const wrapped = await cripto.wrapConversationKey(raw, state.myKey, state.myPublic, convId)
+    const { data: id, error: err } = await supabase.rpc('create_conversation_key', { p_conv: convId, p_wrapped: wrapped })
+    if (err) throw err
+    keyId = id
+    key = await cripto.importConversationKey(raw)
+    keyCache.set(keyId, Promise.resolve(key))
+    cripto.localSet('key:' + keyId, key).catch(() => {})
+    await shareMissingKeys()
+  }
+
+  const out = { keyId, key }
+  sendKeys.set(convId, out)
+  return out
+}
+
+// Entrega as chaves que eu tenho para quem ainda não recebeu (contato que acabou de criar a senha, etc.).
+let shareQueue = Promise.resolve()
+function shareMissingKeys() {
+  shareQueue = shareQueue.then(runShare, runShare)
+  return shareQueue
+}
+
+async function runShare() {
+  if (!state.myKey) return
+  try {
+    const { data, error } = await supabase.rpc('missing_conversation_keys')
+    if (error) throw error
+    for (const row of data) {
+      const raw = await myRawKey(row.key_id)
+      if (!raw) continue
+      const wrapped = await cripto.wrapConversationKey(raw, state.myKey, row.public_key, row.conversation_id)
+      const { error: err } = await supabase.rpc('share_conversation_key', { p_key: row.key_id, p_user: row.user_id, p_wrapped: wrapped })
+      if (err) console.error('chaves', err)
+    }
+  } catch (err) {
+    console.error('chaves', err)
+  }
+}
+
+// Chegou uma chave para mim: abre as mensagens daquela conversa que estavam trancadas.
+async function onKeyReceived({ new: row }) {
+  keyCache.delete(row.key_id)
+  const c = state.current
+  if (c?.conversation_id === row.conversation_id) {
+    const locked = state.msgs.filter((m) => m.locked && m.key_id === row.key_id)
+    await Promise.all(locked.map(openMessage))
+    if (locked.length && state.current === c) renderMessages(false)
+  }
+  scheduleListRefresh()
+}
+
 // ---------- Tempo real ----------
 
 function subscribeRealtime() {
@@ -240,6 +513,14 @@ function subscribeRealtime() {
     .channel('db-messages')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (p) => onInsert(p.new))
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (p) => onUpdate(p.new))
+    // Recebi a chave de uma conversa: abre as mensagens que estavam trancadas.
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_keys', filter: `user_id=eq.${state.user.id}` }, onKeyReceived)
+    // Um contato criou ou trocou as chaves: entrega a ele as chaves das conversas.
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'user_keys' }, (p) => {
+      if (p.new?.user_id === state.user.id) return
+      sendKeys.clear()
+      shareMissingKeys()
+    })
     .subscribe()
 
   state.presence = supabase.channel('online', { config: { presence: { key: state.user.id } } })
@@ -257,7 +538,8 @@ async function onInsert(m) {
   const mine = m.sender_id === state.user.id
   const isOpen = state.current?.conversation_id === m.conversation_id
 
-  if (isOpen) {
+  if (isOpen) await openMessage(m)
+  if (isOpen && state.current?.conversation_id === m.conversation_id) {
     addMessage(m)
     if (!mine && document.visibilityState === 'visible') await markRead()
   }
@@ -268,7 +550,7 @@ function onUpdate(m) {
   if (state.current?.conversation_id === m.conversation_id) {
     const existing = state.msgs.find((x) => x.id === m.id)
     if (existing) {
-      Object.assign(existing, m)
+      existing.read_at = m.read_at // só o "lida" muda depois de enviada
       renderMessages(false)
     }
   }
@@ -287,8 +569,22 @@ async function loadConversations(include) {
   const p_conv = (typeof include === 'string' && include) || state.current?.conversation_id || null
   const { data, error } = await supabase.rpc('my_conversations', { p_conv })
   if (error) return console.error(error)
+  await Promise.all(data.map(openPreview))
   state.conversations = data
   renderConversations()
+}
+
+// A última mensagem vem cifrada: abre aqui para mostrar na lista.
+async function openPreview(c) {
+  if (!c.last_key || !c.last_body?.startsWith('e1:')) return
+  try {
+    const key = await getKey(c.last_key)
+    if (!key) throw new Error('sem chave')
+    const p = await cripto.decryptMessage(key, c.conversation_id, c.last_body)
+    c.last_body = !p.n ? p.t : (p.y || '').startsWith('image/') ? '📷 Foto' : '📎 ' + p.n
+  } catch {
+    c.last_body = '🔒 Mensagem protegida'
+  }
 }
 
 function renderConversations() {
@@ -470,6 +766,9 @@ async function openConversation(c) {
   if (state.current !== c) return
   if (error) return console.error(error)
 
+  await Promise.all(data.map(openMessage))
+  if (state.current !== c) return
+
   // Junta com o que pode ter chegado pelo tempo real enquanto carregava.
   const loaded = data.reverse()
   const ids = new Set(loaded.map((m) => m.id))
@@ -584,7 +883,9 @@ function renderMessages(forceBottom) {
 
     const mine = m.sender_id === state.user.id
     const bubble = el('div', 'msg' + (mine ? ' me' : '') + (m.pending ? ' pending' : ''))
-    if (m.attachment_path || m.localUrl) {
+    if (m.locked) {
+      bubble.append(el('span', 'msg-locked', '🔒 Esta mensagem não pode ser aberta neste aparelho.'))
+    } else if (m.attachment_path || m.localUrl) {
       bubble.append(renderAttachment(m, bubble))
       if (m.body) bubble.append(el('span', 'msg-text', m.body))
     } else {
@@ -633,6 +934,36 @@ function cachedUrl(path) {
   return hit && !(hit instanceof Promise) && hit.expires > Date.now() ? hit.url : null
 }
 
+// Arquivo cifrado: baixa, abre com a chave da conversa e vira um link local (blob:).
+// Arquivos antigos (sem criptografia) continuam pelo link temporário.
+function fileUrl(m) {
+  if (!m.ciphertext) return attachmentUrl(m.attachment_path)
+  const id = 'blob:' + m.attachment_path
+  const hit = urlCache.get(id)
+  if (hit) return hit instanceof Promise ? hit : Promise.resolve(hit.url)
+  const p = (async () => {
+    const key = await getKey(m.key_id)
+    if (!key) throw new Error('sem chave')
+    const res = await fetch(await attachmentUrl(m.attachment_path))
+    if (!res.ok) throw new Error('download ' + res.status)
+    const plain = await cripto.decryptFile(key, m.conversation_id, await res.arrayBuffer())
+    const url = URL.createObjectURL(new Blob([plain], { type: m.attachment_type || 'application/octet-stream' }))
+    urlCache.set(id, { url, blob: true, expires: Infinity })
+    return url
+  })()
+  urlCache.set(id, p)
+  p.catch(() => urlCache.delete(id))
+  return p
+}
+
+function cachedFileUrl(m) {
+  return cachedUrl(m.ciphertext ? 'blob:' + m.attachment_path : m.attachment_path)
+}
+
+function downloadUrl(m, url) {
+  return m.ciphertext ? url : withDownload(url, m.attachment_name)
+}
+
 function withDownload(url, name) {
   return url + (url.includes('?') ? '&' : '?') + 'download=' + encodeURIComponent(name || 'arquivo')
 }
@@ -653,9 +984,9 @@ function renderAttachment(m, bubble) {
     const img = el('img', 'msg-img')
     img.alt = m.attachment_name || 'Foto'
     img.draggable = false
-    const ready = m.localUrl || cachedUrl(m.attachment_path)
+    const ready = m.localUrl || cachedFileUrl(m)
     if (ready) img.src = ready
-    else attachmentUrl(m.attachment_path).then((url) => (img.src = url)).catch(() => (img.alt = 'Foto indisponível'))
+    else fileUrl(m).then((url) => (img.src = url)).catch(() => (img.alt = 'Foto indisponível'))
     if (!m.pending) img.addEventListener('click', () => openViewer(m))
     return img
   }
@@ -671,18 +1002,20 @@ function renderAttachment(m, bubble) {
   if (!m.pending) {
     a.target = '_blank'
     a.rel = 'noopener'
-    const ready = cachedUrl(m.attachment_path)
-    if (ready) a.href = withDownload(ready, m.attachment_name)
-    else attachmentUrl(m.attachment_path).then((url) => (a.href = withDownload(url, m.attachment_name))).catch(() => {})
+    if (m.ciphertext) a.download = m.attachment_name || 'arquivo'
+    const ready = cachedFileUrl(m)
+    if (ready) a.href = downloadUrl(m, ready)
+    else fileUrl(m).then((url) => (a.href = downloadUrl(m, url))).catch(() => {})
   }
   return a
 }
 
 async function openViewer(m) {
   try {
-    const url = await attachmentUrl(m.attachment_path)
+    const url = await fileUrl(m)
     $('viewer-img').src = url
-    $('viewer-download').href = withDownload(url, m.attachment_name)
+    $('viewer-download').href = downloadUrl(m, url)
+    $('viewer-download').download = m.attachment_name || 'foto.jpg'
     $('viewer').showModal()
   } catch {
     toast('Não foi possível abrir a foto.')
@@ -719,12 +1052,6 @@ function shrinkImage(file, max = 1600) {
   })
 }
 
-// Nome seguro para o Storage: sem acentos, espaços nem símbolos.
-function safeFileName(name) {
-  const clean = name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '')
-  return clean.slice(-100) || 'arquivo'
-}
-
 async function sendAttachment(original) {
   const conv = state.current
   if (!conv) return
@@ -748,24 +1075,30 @@ async function sendAttachment(original) {
   state.msgs.push(tmp)
   renderMessages(true)
 
-  const path = `${conv.conversation_id}/${crypto.randomUUID()}/${safeFileName(file.name)}`
-  const up = await supabase.storage.from('attachments').upload(path, file, { contentType: type })
-
+  // O arquivo e o nome dele vão cifrados; o caminho no Storage não tem o nome.
+  const path = `${conv.conversation_id}/${crypto.randomUUID()}`
   let data = null
-  let error = up.error
-  if (!error) {
+  let error = null
+  try {
+    const { keyId, key } = await sendKeyFor(conv.conversation_id)
+    const sealed = await cripto.encryptFile(key, conv.conversation_id, file)
+    const up = await supabase.storage.from('attachments').upload(path, sealed, { contentType: 'application/octet-stream' })
+    if (up.error) throw up.error
     ;({ data, error } = await supabase
       .from('messages')
       .insert({
         conversation_id: conv.conversation_id,
+        key_id: keyId,
+        ciphertext: await cripto.encryptMessage(key, conv.conversation_id, { n: original.name, y: type }),
         attachment_path: path,
-        attachment_name: original.name,
         attachment_type: type,
         attachment_size: file.size,
       })
       .select(MSG_COLS)
       .single())
     if (error) await supabase.storage.from('attachments').remove([path])
+  } catch (err) {
+    error = err
   }
 
   if (state.current !== conv) return
@@ -775,7 +1108,10 @@ async function sendAttachment(original) {
     toast('Não foi possível enviar o arquivo: ' + error.message)
     return
   }
-  data.localUrl = tmp.localUrl // a foto aparece na hora, sem baixar de novo
+  // O arquivo aparece e abre na hora, sem baixar de novo.
+  urlCache.set('blob:' + path, { url: tmp.localUrl || URL.createObjectURL(file), blob: true, expires: Infinity })
+  data.localUrl = tmp.localUrl
+  data.attachment_name = original.name
   addMessage(data)
   scheduleListRefresh()
 }
@@ -830,11 +1166,22 @@ $('send-form').addEventListener('submit', async (e) => {
   state.msgs.push(tmp)
   renderMessages(true)
 
-  const { data, error } = await supabase
-    .from('messages')
-    .insert({ conversation_id: conv.conversation_id, body: text })
-    .select(MSG_COLS)
-    .single()
+  let data = null
+  let error = null
+  try {
+    const { keyId, key } = await sendKeyFor(conv.conversation_id)
+    ;({ data, error } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conv.conversation_id,
+        key_id: keyId,
+        ciphertext: await cripto.encryptMessage(key, conv.conversation_id, { t: text }),
+      })
+      .select(MSG_COLS)
+      .single())
+  } catch (err) {
+    error = err
+  }
 
   if (state.current !== conv) return
   state.msgs = state.msgs.filter((m) => m !== tmp)
@@ -844,6 +1191,7 @@ $('send-form').addEventListener('submit', async (e) => {
     alert('Não foi possível enviar: ' + error.message)
     return
   }
+  data.body = text
   addMessage(data)
   scheduleListRefresh()
 })
@@ -1120,6 +1468,7 @@ $('profile-form').addEventListener('submit', async (e) => {
 $('logout-btn').addEventListener('click', async () => {
   toggleMenu(false)
   await unsubscribePush()
+  await cripto.localClear().catch(() => {}) // as chaves saem do aparelho junto com a conta
   await supabase.auth.signOut()
 })
 

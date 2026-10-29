@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   // Os dados vêm sempre do banco, nunca da requisição.
   const { data: msg } = await supabase
     .from('messages')
-    .select('id, conversation_id, sender_id, body, attachment_type, attachment_name')
+    .select('id, conversation_id, sender_id, body, ciphertext, key_id, attachment_type, attachment_name')
     .eq('id', message_id)
     .single()
   if (!msg) return json({ error: 'message not found' }, 404)
@@ -57,16 +57,26 @@ Deno.serve(async (req) => {
     .select('endpoint, p256dh, auth')
     .in('user_id', recipients)
 
-  const text = msg.body
-    ? msg.body
-    : msg.attachment_type?.startsWith('image/')
-      ? '📷 Foto'
-      : '📎 ' + (msg.attachment_name || 'Arquivo')
+  // Mensagem cifrada: esta função não consegue ler. Vai o texto cifrado (o aparelho abre)
+  // e um texto genérico caso o aparelho não tenha a chave.
+  const text = msg.ciphertext
+    ? msg.attachment_type?.startsWith('image/') ? '📷 Foto' : msg.attachment_type ? '📎 Arquivo' : '🔒 Nova mensagem'
+    : msg.body
+      ? msg.body
+      : msg.attachment_type?.startsWith('image/')
+        ? '📷 Foto'
+        : '📎 ' + (msg.attachment_name || 'Arquivo')
+
+  // O push tem limite de ~4 KB: mensagem cifrada muito longa vai só com o texto genérico.
+  const sealed = msg.ciphertext && msg.ciphertext.length <= 3000
+    ? { ciphertext: msg.ciphertext, key_id: msg.key_id }
+    : {}
 
   const payload = JSON.stringify({
     title: sender?.name || 'Nova mensagem',
     body: text.length > 200 ? text.slice(0, 200) + '…' : text,
     conversation_id: msg.conversation_id,
+    ...sealed,
   })
 
   const list = subs || []

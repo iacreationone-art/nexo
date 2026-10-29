@@ -109,7 +109,7 @@ input, textarea { font: inherit; color: var(--text); }
 }
 .icon-btn:hover { background: var(--surface-2); }
 
-input[type="email"], input:not([type]), textarea {
+input[type="email"], input[type="password"], input:not([type]), textarea {
   width: 100%;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -786,3 +786,18 @@ dialog.viewer[open] { display: flex; align-items: center; justify-content: cente
   box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
   z-index: 50;
 }
+
+/* ---------- Senha de recuperação (criptografia) ---------- */
+
+.keys-dialog form { text-align: center; }
+.keys-dialog label { text-align: left; }
+.keys-dialog h3 { margin: 0; }
+.keys-text { margin: 0 0 4px; font-size: .95rem; line-height: 1.45; }
+.keys-icon {
+  width: 56px; height: 56px; margin: 0 auto 4px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--primary);
+}
+.msg-locked { font-style: italic; opacity: .75; }
