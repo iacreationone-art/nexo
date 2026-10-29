@@ -56,6 +56,9 @@ No SQL Editor, rode (nesta ordem, depois do `schema.sql`):
 2. [`supabase/prioridade1.sql`](supabase/prioridade1.sql) — fotos e arquivos nas conversas, telefone,
    dados do contato e apagar conversa (só para quem apagou)
 
+Depois de `seguranca.sql` e `cripto.sql`, rode também
+[`supabase/apagar.sql`](supabase/apagar.sql) — apagar mensagem ("para mim" e "para todos").
+
 ### 4. Entrar com Google (opcional)
 
 1. Em [console.cloud.google.com](https://console.cloud.google.com), crie um projeto `Nexo`.

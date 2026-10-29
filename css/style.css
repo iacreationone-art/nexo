@@ -609,6 +609,36 @@ dialog h3 { margin: 0 0 6px; }
 dialog form { display: grid; gap: 10px; }
 dialog label { display: grid; gap: 6px; font-weight: 600; }
 .dialog-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 6px; }
+
+/* Menu da mensagem: sobe de baixo, como no celular */
+dialog.msg-menu {
+  margin: auto auto max(12px, env(safe-area-inset-bottom));
+  padding: 6px;
+  width: min(380px, calc(100% - 24px));
+  animation: emoji-panel-in .18s ease-out;
+}
+.msg-menu-body { display: grid; }
+.msg-menu-body button {
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font-size: 1rem;
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+.msg-menu-body button:hover { background: var(--surface-2); }
+.msg-menu-body .danger { color: #e5484d; }
+.msg-menu-body .msg-menu-cancel { text-align: center; color: var(--muted); border-top: 1px solid var(--border); border-radius: 0 0 12px 12px; }
+
+/* Mensagem apagada para todos */
+.msg.deleted { opacity: .75; }
+.msg-deleted { font-style: italic; }
+
+/* No celular, segurar a mensagem abre o menu (não seleciona o texto nem a foto) */
+@media (pointer: coarse) {
+  .msg { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+}
 input:disabled { color: var(--muted); background: var(--surface-2); }
 
 /* ---------- Tela "Meu perfil" (tela cheia no celular) ---------- */

@@ -340,6 +340,16 @@
 
   <input id="saved-input" type="file" accept="image/*" multiple hidden>
 
+  <!-- Menu da mensagem (tocar e segurar) -->
+  <dialog id="msg-menu" class="msg-menu" aria-label="Opções da mensagem">
+    <div class="msg-menu-body">
+      <button type="button" id="msg-copy">📋 Copiar texto</button>
+      <button type="button" id="msg-hide">🗑️ Apagar para mim</button>
+      <button type="button" id="msg-delete-all" class="danger">🚫 Apagar para todos</button>
+      <button type="button" class="msg-menu-cancel" data-close>Cancelar</button>
+    </div>
+  </dialog>
+
   <!-- Senha de recuperação (criptografia de ponta a ponta) -->
   <dialog id="keys-dialog" class="keys-dialog">
     <form id="keys-form">

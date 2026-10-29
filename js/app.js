@@ -33,7 +33,7 @@ let tmpSeq = 0
 let listTimer = null
 let listLoaded = false // já veio a lista do servidor (a guardada não pode mais sobrescrever)
 
-const MSG_COLS = 'id, conversation_id, sender_id, body, ciphertext, key_id, created_at, read_at, attachment_path, attachment_name, attachment_type, attachment_size'
+const MSG_COLS = 'id, conversation_id, sender_id, body, ciphertext, key_id, created_at, read_at, deleted_at, attachment_path, attachment_name, attachment_type, attachment_size'
 const MAX_FILE = 20 * 1024 * 1024
 
 // ---------- Utilidades ----------
@@ -560,8 +560,10 @@ async function onInsert(m) {
 function onUpdate(m) {
   if (state.current?.conversation_id === m.conversation_id) {
     const existing = state.msgs.find((x) => x.id === m.id)
-    if (existing) {
-      existing.read_at = m.read_at // só o "lida" muda depois de enviada: troca só o ✓
+    if (existing && m.deleted_at && !existing.deleted_at) {
+      applyDeleted(existing, m.deleted_at) // quem enviou apagou para todos
+    } else if (existing) {
+      existing.read_at = m.read_at // fora isso, só o "lida" muda depois de enviada: troca só o ✓
       $('messages').querySelector(`[data-id="${m.id}"] .msg-meta`)?.replaceWith(metaNode(existing))
     }
   }
@@ -912,6 +914,27 @@ function removeMessage(m) {
   if (before?.classList.contains('day-sep') && (!after || after.classList.contains('day-sep'))) before.remove()
 }
 
+// Mensagem apagada para todos: some o conteúdo (e a cópia do anexo guardada no aparelho).
+function applyDeleted(m, when) {
+  if (m.attachment_path) forgetFile(m.attachment_path)
+  Object.assign(m, {
+    deleted_at: when,
+    body: null,
+    ciphertext: null,
+    key_id: null,
+    attachment_path: null,
+    attachment_name: null,
+    attachment_type: null,
+    attachment_size: null,
+    localUrl: null,
+    sticker: false,
+    stickerAnim: '',
+    locked: false,
+  })
+  if (viewerMsg === m) $('viewer').close()
+  $('messages').querySelector(`[data-id="${m.id}"]`)?.replaceWith(messageNode(m))
+}
+
 function metaNode(m) {
   const meta = el('div', 'msg-meta', timeFmt.format(new Date(m.created_at)))
   if (m.sender_id === state.user.id) {
@@ -928,7 +951,10 @@ function messageNode(m) {
   const plain = !m.locked && !m.attachment_path && !m.localUrl
   const fig = plain && stickerOf(m.body)
   const emojis = plain && !fig && emojiOnly(m.body)
-  if (m.locked) {
+  if (m.deleted_at) {
+    bubble.classList.add('deleted')
+    bubble.append(el('span', 'msg-deleted', mine ? '🚫 Você apagou esta mensagem' : '🚫 Mensagem apagada'))
+  } else if (m.locked) {
     bubble.append(el('span', 'msg-locked', '🔒 Esta mensagem não pode ser aberta neste aparelho.'))
   } else if (m.attachment_path || m.localUrl) {
     bubble.append(renderAttachment(m, bubble))
@@ -1040,6 +1066,12 @@ async function savedFile(path) {
   } catch {
     return null
   }
+}
+
+async function forgetFile(path) {
+  try {
+    await (await caches.open(FILES_CACHE)).delete(fileKey(path))
+  } catch {}
 }
 
 async function saveFile(path, data) {
@@ -1213,6 +1245,110 @@ async function forwardTo(m, c, row) {
   await openConversation(c)
   if (state.current === c) await sendAttachment(file, { sticker: !!m.sticker, anim: m.stickerAnim })
 }
+
+// ---------- Menu da mensagem (tocar e segurar, ou clique direito) ----------
+
+let menuMsg = null
+
+function openMsgMenu(bubble) {
+  const m = state.msgs.find((x) => String(x.id) === bubble.dataset.id)
+  if (!m || m.pending || $('msg-menu').open) return
+  menuMsg = m
+  const mine = m.sender_id === state.user.id
+  $('msg-copy').hidden = !(m.body && !m.deleted_at && !m.locked && !stickerOf(m.body))
+  $('msg-delete-all').hidden = !mine || !!m.deleted_at
+  $('msg-menu').showModal()
+}
+
+const msgBox = $('messages')
+let pressTimer = null
+let pressStart = null
+let pressFired = false // segurou: o toque que vem depois não abre a foto
+let lastPointer = 'mouse'
+
+msgBox.addEventListener('pointerdown', (e) => {
+  lastPointer = e.pointerType
+  const bubble = e.target.closest('.msg')
+  if (!bubble || e.pointerType === 'mouse') return
+  pressStart = { x: e.clientX, y: e.clientY }
+  pressFired = false
+  clearTimeout(pressTimer)
+  pressTimer = setTimeout(() => {
+    pressFired = true
+    openMsgMenu(bubble)
+  }, 500)
+})
+const cancelPress = () => clearTimeout(pressTimer)
+msgBox.addEventListener('pointermove', (e) => {
+  if (pressStart && Math.hypot(e.clientX - pressStart.x, e.clientY - pressStart.y) > 10) cancelPress()
+})
+msgBox.addEventListener('pointerup', cancelPress)
+msgBox.addEventListener('pointercancel', cancelPress)
+msgBox.addEventListener('scroll', cancelPress)
+// Clique direito no computador; no Android, segurar também chega aqui.
+msgBox.addEventListener('contextmenu', (e) => {
+  const bubble = e.target.closest('.msg')
+  if (!bubble) return
+  e.preventDefault()
+  cancelPress()
+  pressFired = lastPointer !== 'mouse'
+  openMsgMenu(bubble)
+})
+msgBox.addEventListener('click', (e) => {
+  if (!pressFired) return
+  pressFired = false
+  e.preventDefault()
+  e.stopPropagation()
+}, true)
+
+$('msg-menu').addEventListener('click', (e) => {
+  if (e.target.id === 'msg-menu') $('msg-menu').close() // tocou fora
+})
+
+$('msg-copy').addEventListener('click', async () => {
+  $('msg-menu').close()
+  try {
+    await navigator.clipboard.writeText(menuMsg.body)
+    toast('Texto copiado.')
+  } catch {
+    toast('Não foi possível copiar.')
+  }
+})
+
+// Apagar para mim: some só daqui. Dá para desfazer.
+$('msg-hide').addEventListener('click', async () => {
+  const m = menuMsg
+  $('msg-menu').close()
+  const { error } = await supabase.rpc('hide_message', { p_id: m.id })
+  if (error) return toast('Não foi possível apagar: ' + error.message)
+  removeMessage(m)
+  scheduleListRefresh()
+  toast('Mensagem apagada.', {
+    label: 'Desfazer',
+    run: async () => {
+      const { error: undo } = await supabase.rpc('hide_message', { p_id: m.id, p_hide: false })
+      if (undo) return toast('Não foi possível desfazer: ' + undo.message)
+      if (state.current?.conversation_id === m.conversation_id && !state.msgs.some((x) => x.id === m.id)) {
+        state.msgs.push(m)
+        state.msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        renderMessages()
+      }
+      scheduleListRefresh()
+    },
+  })
+})
+
+// Apagar para todos: só quem enviou. Não dá para desfazer.
+$('msg-delete-all').addEventListener('click', async () => {
+  const m = menuMsg
+  $('msg-menu').close()
+  if (!confirm('Apagar esta mensagem para todos? Não dá para desfazer.')) return
+  const { data: path, error } = await supabase.rpc('delete_message_for_all', { p_id: m.id })
+  if (error) return toast('Não foi possível apagar: ' + error.message)
+  if (path) supabase.storage.from('attachments').remove([path]) // o arquivo cifrado sai do servidor
+  applyDeleted(m, new Date().toISOString())
+  scheduleListRefresh()
+})
 
 // Tem partes transparentes? (recorte de foto, figurinha). Olha um pixel a cada 4.
 function hasClearPixels(canvas) {
