@@ -18,9 +18,14 @@ const state = {
   typingChannel: null,
   lastTypingSent: 0,
   pendingOpen: new URLSearchParams(location.search).get('c'),
+  contact: null,      // dados do contato da conversa aberta (contact_card)
+  phone: null,        // meu telefone { phone, visible }
 }
 let tmpSeq = 0
 let listTimer = null
+
+const MSG_COLS = 'id, conversation_id, sender_id, body, created_at, read_at, attachment_path, attachment_name, attachment_type, attachment_size'
+const MAX_FILE = 20 * 1024 * 1024
 
 // ---------- Utilidades ----------
 
@@ -160,7 +165,9 @@ function teardown() {
   Object.assign(state, {
     user: null, profile: null, conversations: [], current: null, msgs: [],
     online: new Set(), dbChannel: null, presence: null, typingChannel: null,
+    contact: null, phone: null,
   })
+  urlCache.clear()
   $('conv-list').replaceChildren()
 }
 
@@ -169,6 +176,9 @@ async function loadProfile() {
   if (error) console.error(error)
   state.profile = data || { id: state.user.id, name: state.user.email, email: state.user.email }
   renderMe()
+
+  const { data: phone } = await supabase.from('user_phones').select('phone, visible').maybeSingle()
+  state.phone = phone || null
 }
 
 // ---------- Tempo real ----------
@@ -221,8 +231,10 @@ function scheduleListRefresh() {
 
 // ---------- Lista de conversas ----------
 
-async function loadConversations() {
-  const { data, error } = await supabase.rpc('my_conversations')
+// include: id de uma conversa que deve aparecer mesmo se estiver apagada.
+async function loadConversations(include) {
+  const p_conv = (typeof include === 'string' && include) || state.current?.conversation_id || null
+  const { data, error } = await supabase.rpc('my_conversations', { p_conv })
   if (error) return console.error(error)
   state.conversations = data
   renderConversations()
@@ -232,6 +244,7 @@ function renderConversations() {
   const list = $('conv-list')
   list.replaceChildren()
   $('conv-empty').hidden = state.conversations.length > 0
+  $('swipe-hint').hidden = state.conversations.length === 0
 
   const q = normalize($('search-input').value.trim())
   const shown = q
@@ -240,7 +253,13 @@ function renderConversations() {
   $('search-empty').hidden = !q || shown.length > 0 || state.conversations.length === 0
 
   for (const c of shown) {
-    const li = el('li', 'conv-item')
+    const wrap = el('li', 'conv-swipe')
+    wrap.dataset.id = c.conversation_id
+    const bg = el('span', 'conv-swipe-bg', 'Apagar')
+    bg.setAttribute('aria-hidden', 'true')
+    bg.insertAdjacentHTML('afterbegin', TRASH_ICON)
+
+    const li = el('div', 'conv-item')
     if (c.conversation_id === state.current?.conversation_id) li.classList.add('active')
     if (c.unread > 0) li.classList.add('unread')
 
@@ -263,8 +282,90 @@ function renderConversations() {
     main.append(top, bottom)
     li.append(av, main)
     li.addEventListener('click', () => openConversation(c))
-    list.append(li)
+    wrap.append(bg, li)
+    list.append(wrap)
   }
+}
+
+const TRASH_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>'
+
+// Arrastar para a esquerda: passando de 35% da largura, onDelete(wrap) apaga
+// (devolve true; com false o item volta ao lugar). Rolagem vertical continua normal.
+function swipeToDelete(list, onDelete) {
+  let row = null
+  let startX = 0
+  let startY = 0
+  let dx = 0
+  let dragging = false
+  list.addEventListener('pointerdown', (e) => {
+    row = e.button === 0 ? e.target.closest('.conv-item') : null
+    startX = e.clientX
+    startY = e.clientY
+    dx = 0
+    dragging = false
+  })
+  list.addEventListener('pointermove', (e) => {
+    if (!row) return
+    const x = e.clientX - startX
+    const y = e.clientY - startY
+    if (!dragging) {
+      if (Math.abs(y) > 10 && Math.abs(y) > Math.abs(x)) return void (row = null) // está rolando a lista
+      if (x > -10) return
+      dragging = true
+      row.setPointerCapture(e.pointerId)
+      row.classList.add('dragging')
+    }
+    dx = Math.min(0, x)
+    row.style.transform = `translateX(${dx}px)`
+  })
+  const end = async () => {
+    if (!row) return
+    const r = row
+    row = null
+    r.classList.remove('dragging')
+    if (!dragging) return
+    setTimeout(() => (dragging = false)) // depois do clique que o soltar dispara
+    if (-dx < r.offsetWidth * 0.35) return void (r.style.transform = '')
+    const wrap = r.closest('.conv-swipe')
+    r.style.transform = 'translateX(-100%)'
+    wrap.classList.add('removing')
+    if (await onDelete(wrap)) {
+      wrap.hidden = true
+      renderConversations() // apagou o último: mostra o estado vazio
+    } else {
+      wrap.classList.remove('removing')
+      r.style.transform = ''
+    }
+  }
+  list.addEventListener('pointerup', end)
+  list.addEventListener('pointercancel', end)
+  // Soltar depois de arrastar não abre a conversa.
+  list.addEventListener('click', (e) => dragging && (e.preventDefault(), e.stopPropagation()), true)
+}
+
+swipeToDelete($('conv-list'), (wrap) => hideConversation(wrap.dataset.id))
+
+// Apaga a conversa só para mim, com "Desfazer" no aviso.
+async function hideConversation(id) {
+  const { error } = await supabase.rpc('hide_conversation', { p_conv: id })
+  if (error) {
+    toast('Não foi possível apagar a conversa.')
+    return false
+  }
+  if (state.current?.conversation_id === id) {
+    if (history.state?.chat) history.back()
+    else closeConversation()
+  }
+  state.conversations = state.conversations.filter((c) => c.conversation_id !== id)
+  toast('Conversa apagada.', {
+    label: 'Desfazer',
+    run: async () => {
+      const { error: undo } = await supabase.rpc('hide_conversation', { p_conv: id, p_hide: false })
+      if (undo) return toast('Não foi possível desfazer.')
+      loadConversations()
+    },
+  })
+  return true
 }
 
 // Pesquisa sem diferenciar maiúsculas nem acentos ("joao" encontra "João").
@@ -307,9 +408,11 @@ async function openConversation(c) {
     })
     .subscribe()
 
+  loadContact(c)
+
   const { data, error } = await supabase
     .from('messages')
-    .select('id, conversation_id, sender_id, body, created_at, read_at')
+    .select(MSG_COLS)
     .eq('conversation_id', c.conversation_id)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -334,6 +437,8 @@ function closeConversation(resetView = true) {
   state.current = null
   state.msgs = []
   state.typingUntil = 0
+  state.contact = null
+  $('call-btn').hidden = true
   if (!resetView) return
   document.body.classList.remove('in-chat')
   $('chat-view').hidden = true
@@ -341,6 +446,53 @@ function closeConversation(resetView = true) {
   $('msg-input').value = ''
   renderConversations()
 }
+
+// ---------- Dados do contato ----------
+
+// "+5511912345678" -> "+55 (11) 91234-5678"
+function formatPhone(phone) {
+  const m = /^\+55(\d{2})(\d{4,5})(\d{4})$/.exec(phone || '')
+  return m ? `+55 (${m[1]}) ${m[2]}-${m[3]}` : phone || ''
+}
+
+async function loadContact(c) {
+  const { data, error } = await supabase.rpc('contact_card', { p_user: c.other_id })
+  if (state.current !== c) return
+  if (error) return console.error(error)
+  state.contact = data?.[0] || null
+  const phone = state.contact?.phone
+  $('call-btn').hidden = !phone
+  if (phone) $('call-btn').href = 'tel:' + phone
+}
+
+$('chat-contact').addEventListener('click', async () => {
+  const c = state.current
+  if (!c) return
+  if (!state.contact) await loadContact(c)
+  const k = state.contact || { id: c.other_id, name: c.other_name, avatar_url: c.other_avatar }
+
+  avatar($('contact-avatar'), k.name, k.id, k.avatar_url)
+  $('contact-name').textContent = k.name
+  $('contact-about').textContent = k.about || ''
+  $('contact-about').hidden = !k.about
+  $('contact-email').textContent = k.email || ''
+  $('contact-email').parentElement.hidden = !k.email
+
+  $('contact-phone-box').hidden = !k.phone
+  if (k.phone) {
+    $('contact-phone').textContent = formatPhone(k.phone)
+    $('contact-call').href = 'tel:' + k.phone
+    $('contact-whats').href = 'https://wa.me/' + k.phone.replace(/\D/g, '')
+  }
+  $('contact-dialog').showModal()
+})
+
+$('contact-delete').addEventListener('click', async () => {
+  const c = state.current
+  if (!c) return
+  $('contact-dialog').close()
+  await hideConversation(c.conversation_id)
+})
 
 async function markRead() {
   if (!state.current) return
@@ -357,7 +509,11 @@ function renderChatStatus() {
 }
 
 function addMessage(m) {
-  if (state.msgs.some((x) => x.id === m.id)) return
+  const existing = state.msgs.find((x) => x.id === m.id)
+  if (existing) {
+    if (m.localUrl && !existing.localUrl) existing.localUrl = m.localUrl
+    return
+  }
   state.msgs.push(m)
   renderMessages(false)
 }
@@ -377,7 +533,12 @@ function renderMessages(forceBottom) {
 
     const mine = m.sender_id === state.user.id
     const bubble = el('div', 'msg' + (mine ? ' me' : '') + (m.pending ? ' pending' : ''))
-    bubble.append(document.createTextNode(m.body))
+    if (m.attachment_path || m.localUrl) {
+      bubble.append(renderAttachment(m, bubble))
+      if (m.body) bubble.append(el('span', 'msg-text', m.body))
+    } else {
+      bubble.append(document.createTextNode(m.body))
+    }
 
     const meta = el('div', 'msg-meta', timeFmt.format(new Date(m.created_at)))
     if (mine) {
@@ -390,6 +551,189 @@ function renderMessages(forceBottom) {
 
   if (forceBottom || nearBottom) box.scrollTop = box.scrollHeight
 }
+
+// ---------- Anexos ----------
+
+// Os arquivos ficam numa pasta privada: cada um é aberto por um link temporário (1 hora).
+const urlCache = new Map() // caminho -> { url, expires } ou Promise
+
+function attachmentUrl(path) {
+  const hit = urlCache.get(path)
+  if (hit && !(hit instanceof Promise) && hit.expires > Date.now()) return Promise.resolve(hit.url)
+  if (hit instanceof Promise) return hit
+  const p = supabase.storage
+    .from('attachments')
+    .createSignedUrl(path, 3600)
+    .then(({ data, error }) => {
+      if (error) throw error
+      urlCache.set(path, { url: data.signedUrl, expires: Date.now() + 50 * 60 * 1000 })
+      return data.signedUrl
+    })
+    .catch((err) => {
+      urlCache.delete(path)
+      throw err
+    })
+  urlCache.set(path, p)
+  return p
+}
+
+function cachedUrl(path) {
+  const hit = urlCache.get(path)
+  return hit && !(hit instanceof Promise) && hit.expires > Date.now() ? hit.url : null
+}
+
+function withDownload(url, name) {
+  return url + (url.includes('?') ? '&' : '?') + 'download=' + encodeURIComponent(name || 'arquivo')
+}
+
+function fileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1).replace('.', ',') + ' MB'
+}
+
+const FILE_ICON = '<svg viewBox="0 0 24 24" width="32" height="32"><path fill="currentColor" d="M6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V9h5.5zM8 13v2h8v-2zm0 4v2h5v-2z"/></svg>'
+
+function renderAttachment(m, bubble) {
+  const isImage = (m.attachment_type || '').startsWith('image/')
+
+  if (isImage) {
+    bubble.classList.add('has-image')
+    const img = el('img', 'msg-img')
+    img.alt = m.attachment_name || 'Foto'
+    img.draggable = false
+    const ready = m.localUrl || cachedUrl(m.attachment_path)
+    if (ready) img.src = ready
+    else attachmentUrl(m.attachment_path).then((url) => (img.src = url)).catch(() => (img.alt = 'Foto indisponível'))
+    if (!m.pending) img.addEventListener('click', () => openViewer(m))
+    return img
+  }
+
+  const a = el('a', 'msg-file')
+  a.insertAdjacentHTML('afterbegin', FILE_ICON)
+  const info = el('span', 'msg-file-info')
+  info.append(
+    el('strong', null, m.attachment_name || 'Arquivo'),
+    el('small', null, m.pending ? 'Enviando…' : fileSize(m.attachment_size)),
+  )
+  a.append(info)
+  if (!m.pending) {
+    a.target = '_blank'
+    a.rel = 'noopener'
+    const ready = cachedUrl(m.attachment_path)
+    if (ready) a.href = withDownload(ready, m.attachment_name)
+    else attachmentUrl(m.attachment_path).then((url) => (a.href = withDownload(url, m.attachment_name))).catch(() => {})
+  }
+  return a
+}
+
+async function openViewer(m) {
+  try {
+    const url = await attachmentUrl(m.attachment_path)
+    $('viewer-img').src = url
+    $('viewer-download').href = withDownload(url, m.attachment_name)
+    $('viewer').showModal()
+  } catch {
+    toast('Não foi possível abrir a foto.')
+  }
+}
+
+$('viewer').addEventListener('click', (e) => {
+  if (e.target.id === 'viewer' || e.target.id === 'viewer-img') $('viewer').close()
+})
+
+// Fotos grandes viram JPEG de até 1600px (economiza internet e espaço). GIFs vão como estão.
+function shrinkImage(file, max = 1600) {
+  return new Promise((resolve) => {
+    if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type)) return resolve(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(img.src)
+      const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.naturalWidth * scale)
+      canvas.height = Math.round(img.naturalHeight * scale)
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      canvas.toBlob((blob) => {
+        if (!blob || blob.size >= file.size) return resolve(file)
+        const name = file.name.replace(/\.[^.]+$/, '') + '.jpg'
+        resolve(new File([blob], name, { type: 'image/jpeg' }))
+      }, 'image/jpeg', 0.82)
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src)
+      resolve(file)
+    }
+    img.src = URL.createObjectURL(file)
+  })
+}
+
+// Nome seguro para o Storage: sem acentos, espaços nem símbolos.
+function safeFileName(name) {
+  const clean = name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '')
+  return clean.slice(-100) || 'arquivo'
+}
+
+async function sendAttachment(original) {
+  const conv = state.current
+  if (!conv) return
+  const file = await shrinkImage(original)
+  if (file.size > MAX_FILE) return toast(`"${original.name}" passa de 20 MB.`)
+
+  const type = file.type || 'application/octet-stream'
+  const tmp = {
+    id: 'tmp-' + ++tmpSeq,
+    conversation_id: conv.conversation_id,
+    sender_id: state.user.id,
+    body: null,
+    created_at: new Date().toISOString(),
+    read_at: null,
+    attachment_name: original.name,
+    attachment_type: type,
+    attachment_size: file.size,
+    localUrl: type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    pending: true,
+  }
+  state.msgs.push(tmp)
+  renderMessages(true)
+
+  const path = `${conv.conversation_id}/${crypto.randomUUID()}/${safeFileName(file.name)}`
+  const up = await supabase.storage.from('attachments').upload(path, file, { contentType: type })
+
+  let data = null
+  let error = up.error
+  if (!error) {
+    ;({ data, error } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conv.conversation_id,
+        attachment_path: path,
+        attachment_name: original.name,
+        attachment_type: type,
+        attachment_size: file.size,
+      })
+      .select(MSG_COLS)
+      .single())
+    if (error) await supabase.storage.from('attachments').remove([path])
+  }
+
+  if (state.current !== conv) return
+  state.msgs = state.msgs.filter((m) => m !== tmp)
+  if (error) {
+    renderMessages(false)
+    toast('Não foi possível enviar o arquivo: ' + error.message)
+    return
+  }
+  data.localUrl = tmp.localUrl // a foto aparece na hora, sem baixar de novo
+  addMessage(data)
+  scheduleListRefresh()
+}
+
+$('file-input').addEventListener('change', async (e) => {
+  const files = [...e.target.files]
+  e.target.value = ''
+  for (const f of files) await sendAttachment(f)
+})
 
 // ---------- Enviar ----------
 
@@ -438,7 +782,7 @@ $('send-form').addEventListener('submit', async (e) => {
   const { data, error } = await supabase
     .from('messages')
     .insert({ conversation_id: conv.conversation_id, body: text })
-    .select('id, conversation_id, sender_id, body, created_at, read_at')
+    .select(MSG_COLS)
     .single()
 
   if (state.current !== conv) return
@@ -487,10 +831,12 @@ $('new-chat-form').addEventListener('submit', async (e) => {
   btn.disabled = true
   setMsg($('new-chat-msg'), 'Procurando…')
 
-  const { data: found, error } = await supabase.rpc('find_user_by_email', { p_email: $('new-chat-email').value })
+  const query = $('new-chat-email').value.trim()
+  const { data: found, error } = await supabase.rpc('find_user', { p_query: query })
   if (error || !found?.length) {
     btn.disabled = false
-    return setMsg($('new-chat-msg'), 'Ninguém com esse e-mail usa o Nexo ainda. Peça para a pessoa entrar uma vez.', true)
+    const what = query.includes('@') ? 'esse e-mail' : 'esse telefone'
+    return setMsg($('new-chat-msg'), `Ninguém com ${what} usa o Nexo ainda. Peça para a pessoa entrar uma vez.`, true)
   }
 
   const { data: convId, error: err2 } = await supabase.rpc('start_direct_chat', { p_other: found[0].id })
@@ -498,7 +844,7 @@ $('new-chat-form').addEventListener('submit', async (e) => {
   if (err2) return setMsg($('new-chat-msg'), err2.message, true)
 
   $('new-chat-dialog').close()
-  await loadConversations()
+  await loadConversations(convId)
   openById(convId)
 })
 
@@ -514,13 +860,23 @@ function renderMe() {
   $('photo-remove').hidden = !p.avatar_url
 }
 
+// action (opcional): { label, run } vira um botão no aviso, como "Desfazer".
 let toastTimer = null
-function toast(text) {
+function toast(text, action = null) {
   const t = $('toast')
   t.textContent = text
+  if (action) {
+    const btn = el('button', 'toast-action', action.label)
+    btn.type = 'button'
+    btn.onclick = () => {
+      t.hidden = true
+      action.run()
+    }
+    t.append(' ', btn)
+  }
   t.hidden = false
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => (t.hidden = true), 3500)
+  toastTimer = setTimeout(() => (t.hidden = true), action ? 6000 : 3500)
 }
 
 // Menu do usuário
@@ -546,6 +902,8 @@ $('menu-profile').addEventListener('click', () => {
   $('profile-name').value = state.profile.name
   $('profile-about').value = state.profile.about || ''
   $('profile-email').value = state.profile.email
+  $('profile-phone').value = formatPhone(state.phone?.phone)
+  $('profile-phone-visible').checked = state.phone ? state.phone.visible : true
   setMsg($('profile-msg'), '')
   renderMe()
   $('profile-dialog').showModal()
@@ -561,6 +919,15 @@ $('profile-form').addEventListener('submit', async (e) => {
   const { error } = await supabase.from('profiles').update(changes).eq('id', state.user.id)
   if (error) return setMsg($('profile-msg'), error.message, true)
   Object.assign(state.profile, changes)
+
+  const phoneText = $('profile-phone').value.trim()
+  const visible = $('profile-phone-visible').checked
+  const phoneChanged = phoneText !== formatPhone(state.phone?.phone) || visible !== (state.phone?.visible ?? true)
+  if (phoneChanged) {
+    const { data: saved, error: phoneErr } = await supabase.rpc('set_my_phone', { p_phone: phoneText, p_visible: visible })
+    if (phoneErr) return setMsg($('profile-msg'), phoneErr.message, true)
+    state.phone = saved ? { phone: saved, visible } : null
+  }
   renderMe()
   $('profile-dialog').close()
   toast('Perfil salvo')

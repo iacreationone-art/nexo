@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
   // Os dados vêm sempre do banco, nunca da requisição.
   const { data: msg } = await supabase
     .from('messages')
-    .select('id, conversation_id, sender_id, body')
+    .select('id, conversation_id, sender_id, body, attachment_type, attachment_name')
     .eq('id', message_id)
     .single()
   if (!msg) return new Response('message not found', { status: 404 })
@@ -46,9 +46,15 @@ Deno.serve(async (req) => {
     .select('endpoint, p256dh, auth')
     .in('user_id', recipients)
 
+  const text = msg.body
+    ? msg.body
+    : msg.attachment_type?.startsWith('image/')
+      ? '📷 Foto'
+      : '📎 ' + (msg.attachment_name || 'Arquivo')
+
   const payload = JSON.stringify({
     title: sender?.name || 'Nova mensagem',
-    body: msg.body.length > 200 ? msg.body.slice(0, 200) + '…' : msg.body,
+    body: text.length > 200 ? text.slice(0, 200) + '…' : text,
     conversation_id: msg.conversation_id,
   })
 

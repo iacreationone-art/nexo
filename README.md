@@ -9,7 +9,10 @@ Abra no navegador do celular e use **Adicionar à tela inicial**: o Nexo vira um
 ## Recursos
 
 - Login por código enviado ao e-mail
-- Conversas 1 a 1 começadas pelo e-mail do contato
+- Conversas 1 a 1 começadas pelo e-mail ou telefone do contato
+- Fotos e arquivos (até 20 MB) em pasta privada da conversa
+- Perfil com foto, recado e telefone; dados do contato com Ligar e WhatsApp
+- Arrastar a conversa para a esquerda apaga só para você, com "Desfazer"
 - Mensagens chegando na hora, "online", "digitando…", ✓ enviada / ✓✓ lida
 - Contador de não lidas
 - Instalável (PWA), tema claro/escuro automático
@@ -45,7 +48,15 @@ Abra no navegador do celular e use **Adicionar à tela inicial**: o Nexo vira um
 Qualquer servidor estático serve, por exemplo a extensão *Live Server* do VS Code.
 Adicione `http://localhost:5500` (ou a porta usada) às *Redirect URLs* do Supabase.
 
-### 3. Notificações push (opcional)
+### 3. Perfil, fotos, telefone e apagar conversa
+
+No SQL Editor, rode (nesta ordem, depois do `schema.sql`):
+
+1. [`supabase/perfil.sql`](supabase/perfil.sql) — foto de perfil e recado
+2. [`supabase/prioridade1.sql`](supabase/prioridade1.sql) — fotos e arquivos nas conversas, telefone,
+   dados do contato e apagar conversa (só para quem apagou)
+
+### 4. Notificações push (opcional)
 
 Avisam de mensagens novas mesmo com o app fechado. As chaves secretas ficam fora do repositório
 (arquivo `nexo-segredos.txt`) — nunca as coloque no GitHub.
@@ -69,7 +80,7 @@ Ao publicar mudanças, aumente a versão em `sw.js` (`const CACHE = 'nexo-v2'`) 
 
 ## Próximos passos possíveis
 
-- Fotos, áudios e documentos (Supabase Storage)
+- Mensagens de áudio
 - Grupos
 - Foto de perfil
 - Canais privados do Realtime para "online" e "digitando…"

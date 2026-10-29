@@ -86,6 +86,7 @@
         <button id="install-close" class="icon-btn" aria-label="Fechar">✕</button>
       </div>
 
+      <p id="swipe-hint" class="swipe-hint muted" hidden>Arraste uma conversa para a esquerda para apagar.</p>
       <ul id="conv-list" class="conv-list"></ul>
       <p id="search-empty" class="search-empty muted" hidden>Nenhuma conversa encontrada.</p>
       <div id="conv-empty" class="empty" hidden>
@@ -110,16 +111,25 @@
           <button id="back-btn" class="icon-btn back" aria-label="Voltar">
             <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M15.7 5.3a1 1 0 0 1 0 1.4L10.4 12l5.3 5.3a1 1 0 0 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z"/></svg>
           </button>
-          <div id="chat-avatar" class="avatar"></div>
-          <div class="chat-title">
-            <strong id="chat-name"></strong>
-            <small id="chat-status" class="muted"></small>
-          </div>
+          <button type="button" id="chat-contact" class="chat-contact" aria-label="Ver perfil do contato">
+            <div id="chat-avatar" class="avatar"></div>
+            <div class="chat-title">
+              <strong id="chat-name"></strong>
+              <small id="chat-status" class="muted"></small>
+            </div>
+          </button>
+          <a id="call-btn" class="icon-btn" href="#" title="Ligar" aria-label="Ligar" hidden>
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>
+          </a>
         </header>
 
         <div id="messages" class="messages"></div>
 
         <form id="send-form" class="composer">
+          <label class="attach-btn" title="Enviar foto ou arquivo" aria-label="Enviar foto ou arquivo">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M16.5 6.5v10a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v10.5a1.5 1.5 0 0 1-3 0V6.5H9v9a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v11.5a6 6 0 0 0 12 0v-10z"/></svg>
+            <input id="file-input" type="file" multiple hidden>
+          </label>
           <textarea id="msg-input" rows="1" placeholder="Mensagem" maxlength="4000"></textarea>
           <button type="submit" class="send-btn" aria-label="Enviar">
             <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6l-.1 6.5L15 12 3.3 13.9z"/></svg>
@@ -133,8 +143,8 @@
   <dialog id="new-chat-dialog">
     <form id="new-chat-form" method="dialog">
       <h3>Nova conversa</h3>
-      <p class="muted">Digite o e-mail de quem já usa o Nexo.</p>
-      <input id="new-chat-email" type="email" placeholder="contato@email.com" required>
+      <p class="muted">Digite o e-mail ou o telefone de quem já usa o Nexo.</p>
+      <input id="new-chat-email" placeholder="contato@email.com ou (11) 91234-5678" autocomplete="off" required>
       <p id="new-chat-msg" class="form-msg" role="status"></p>
       <div class="dialog-actions">
         <button type="button" class="btn-link" data-close>Cancelar</button>
@@ -170,6 +180,13 @@
       <label>Recado
         <input id="profile-about" maxlength="140" placeholder="Ex.: Disponível">
       </label>
+      <label>Telefone
+        <input id="profile-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 91234-5678">
+      </label>
+      <label class="check">
+        <input id="profile-phone-visible" type="checkbox" checked>
+        <span>Permitir que meus contatos me encontrem e liguem por este número</span>
+      </label>
       <label>E-mail
         <input id="profile-email" disabled>
       </label>
@@ -180,6 +197,51 @@
         <button type="submit" class="btn">Salvar</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Perfil do contato -->
+  <dialog id="contact-dialog" class="sheet">
+    <div class="sheet-body">
+      <header class="sheet-head">
+        <button type="button" class="icon-btn" data-close aria-label="Voltar">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M15.7 5.3a1 1 0 0 1 0 1.4L10.4 12l5.3 5.3a1 1 0 0 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z"/></svg>
+        </button>
+        <h3>Dados do contato</h3>
+      </header>
+
+      <div class="photo-area">
+        <div id="contact-avatar" class="avatar avatar-xl"></div>
+        <h2 id="contact-name" class="contact-name"></h2>
+        <p id="contact-about" class="muted contact-about"></p>
+      </div>
+
+      <div id="contact-phone-box" class="contact-box" hidden>
+        <small class="muted">Telefone</small>
+        <strong id="contact-phone"></strong>
+        <div class="contact-actions">
+          <a id="contact-call" class="btn" href="#">Ligar</a>
+          <a id="contact-whats" class="btn btn-outline" href="#" target="_blank" rel="noopener">WhatsApp</a>
+        </div>
+      </div>
+
+      <div class="contact-box">
+        <small class="muted">E-mail</small>
+        <strong id="contact-email"></strong>
+      </div>
+
+      <button type="button" id="contact-delete" class="btn-link danger contact-delete">Apagar conversa</button>
+    </div>
+  </dialog>
+
+  <!-- Ver foto -->
+  <dialog id="viewer" class="viewer">
+    <div class="viewer-bar">
+      <a id="viewer-download" class="icon-btn" href="#" download title="Baixar" aria-label="Baixar">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M11 4h2v9.2l3.3-3.3 1.4 1.4L12 17l-5.7-5.7 1.4-1.4 3.3 3.3zM5 19h14v2H5z"/></svg>
+      </a>
+      <button type="button" class="icon-btn" data-close aria-label="Fechar">✕</button>
+    </div>
+    <img id="viewer-img" alt="">
   </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
