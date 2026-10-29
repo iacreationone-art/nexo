@@ -106,6 +106,18 @@ $('google-btn').addEventListener('click', async () => {
   }
 })
 
+// O botão do Google só aparece se o login com Google estiver ligado no Supabase.
+async function checkGoogleEnabled() {
+  $('google-area').hidden = true
+  try {
+    const res = await fetch(SUPABASE_URL + '/auth/v1/settings', { headers: { apikey: SUPABASE_ANON_KEY } })
+    const settings = await res.json()
+    $('google-area').hidden = !settings.external?.google || !$('code-form').hidden
+  } catch {
+    // sem internet ou erro: fica só o login por e-mail
+  }
+}
+
 // Se o Google ou o Supabase devolveram um erro no endereço, mostra na tela de login.
 function showLoginErrorFromUrl() {
   const params = new URLSearchParams(location.hash.slice(1) || location.search)
@@ -153,7 +165,7 @@ $('code-form').addEventListener('submit', async (e) => {
 $('change-email').addEventListener('click', () => {
   $('code-form').hidden = true
   $('email-form').hidden = false
-  $('google-area').hidden = false
+  checkGoogleEnabled()
   $('code-input').value = ''
   setMsg($('login-msg'), '')
 })
@@ -169,6 +181,7 @@ async function handleSession(session) {
   if (user) await startApp()
   else {
     show('login')
+    checkGoogleEnabled()
     showLoginErrorFromUrl()
   }
 }
