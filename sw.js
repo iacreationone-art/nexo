@@ -1,6 +1,6 @@
 // Service worker do Nexo: permite instalar o site como app e abrir a tela mesmo sem internet.
-// Ao mudar arquivos do app, aumente a versão para forçar a atualização do cache.
-const CACHE = 'nexo-v15'
+// Ao mudar arquivos do app, aumente a versão: o celular baixa tudo de novo de uma vez.
+const CACHE = 'nexo-v16'
 const SHELL = [
   './',
   'index.html',
@@ -15,6 +15,7 @@ const SHELL = [
   'icons/icon-512.png',
   'icons/badge-96.png',
   'icons/vazio-96.png',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/dist/umd/supabase.js',
 ]
 
 self.addEventListener('install', (e) => {
@@ -22,33 +23,36 @@ self.addEventListener('install', (e) => {
   self.skipWaiting()
 })
 
+// Apaga só as versões antigas do app (o cache "nexo-arquivos", de fotos cifradas, fica).
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('nexo-v') && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   )
 })
 
-// Rede primeiro (sempre a versão mais nova); cache só quando estiver offline.
+// O app abre na hora com a cópia guardada e, ao mesmo tempo, busca a versão nova
+// para a próxima abertura. Sem cópia (primeira vez), vai direto à rede.
+// O jsdelivr tem versão fixa no endereço, então a cópia nunca fica velha.
 // Chamadas ao Supabase nunca passam pelo cache.
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
-  const cacheable =
-    e.request.method === 'GET' &&
-    (url.origin === self.location.origin || url.hostname === 'cdn.jsdelivr.net')
-  if (!cacheable) return
+  const cdn = url.hostname === 'cdn.jsdelivr.net'
+  if (e.request.method !== 'GET' || (url.origin !== self.location.origin && !cdn)) return
 
   e.respondWith(
-    fetch(e.request)
-      .then((res) => {
-        if (res.ok) {
-          const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put(e.request, copy))
-        }
+    caches.open(CACHE).then(async (cache) => {
+      const hit = await cache.match(e.request, { ignoreSearch: true })
+      if (hit && cdn) return hit
+      const fresh = fetch(e.request).then((res) => {
+        if (res.ok) cache.put(url.origin + url.pathname, res.clone())
         return res
       })
-      .catch(() => caches.match(e.request, { ignoreSearch: true }))
+      if (!hit) return fresh.catch(() => Response.error())
+      e.waitUntil(fresh.catch(() => {}))
+      return hit
+    })
   )
 })
 

@@ -35,13 +35,22 @@ function join(a, b) {
 
 // ---------- Guardado no aparelho (IndexedDB) ----------
 
+// Abre o banco uma vez só e reaproveita a conexão.
+let dbPromise = null
 function db() {
-  return new Promise((resolve, reject) => {
+  dbPromise ||= new Promise((resolve, reject) => {
     const req = indexedDB.open('nexo-chaves', 1)
     req.onupgradeneeded = () => req.result.createObjectStore('chaves')
-    req.onsuccess = () => resolve(req.result)
+    req.onsuccess = () => {
+      req.result.onclose = () => (dbPromise = null)
+      resolve(req.result)
+    }
     req.onerror = () => reject(req.error)
+  }).catch((err) => {
+    dbPromise = null
+    throw err
   })
+  return dbPromise
 }
 
 async function idb(mode, fn) {

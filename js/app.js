@@ -1,11 +1,11 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/+esm'
 import { SUPABASE_URL, SUPABASE_ANON_KEY, VAPID_PUBLIC_KEY } from './config.js'
 import * as cripto from './cripto.js'
 import { emojiOnly, motionFor, emojiRain, setupEmojiPicker } from './emoji.js'
 
 const $ = (id) => document.getElementById(id)
 const configured = !SUPABASE_URL.includes('SEU-PROJETO') && !SUPABASE_ANON_KEY.includes('SUA_ANON_KEY')
-const supabase = configured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null
+// A biblioteca vem do <script> no index.html (um arquivo só, carregado antes deste).
+const supabase = configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null
 
 const state = {
   user: null,
@@ -29,6 +29,7 @@ const keyCache = new Map()  // id da chave da conversa -> CryptoKey, ou null se 
 const sendKeys = new Map()  // id da conversa -> { keyId, key } usada para enviar
 let tmpSeq = 0
 let listTimer = null
+let listLoaded = false // já veio a lista do servidor (a guardada não pode mais sobrescrever)
 
 const MSG_COLS = 'id, conversation_id, sender_id, body, ciphertext, key_id, created_at, read_at, attachment_path, attachment_name, attachment_type, attachment_size'
 const MAX_FILE = 20 * 1024 * 1024
@@ -205,8 +206,10 @@ async function handleSession(session) {
 
 async function startApp() {
   show('app')
-  await loadProfile()
-  if (!(await setupKeys())) return
+  // A lista guardada aparece na hora; perfil e chaves são buscados ao mesmo tempo.
+  showSavedConversations()
+  const [ok] = await Promise.all([setupKeys(), loadProfile()])
+  if (!ok) return
   await loadConversations()
   subscribeRealtime()
   syncPush()
@@ -228,18 +231,20 @@ function teardown() {
   })
   keyCache.clear()
   sendKeys.clear()
+  listLoaded = false
   for (const hit of urlCache.values()) if (hit.blob) URL.revokeObjectURL(hit.url)
   urlCache.clear()
   $('conv-list').replaceChildren()
 }
 
 async function loadProfile() {
-  const { data, error } = await supabase.from('profiles').select('*').eq('id', state.user.id).single()
+  const [{ data, error }, { data: phone }] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', state.user.id).single(),
+    supabase.from('user_phones').select('phone, visible').maybeSingle(),
+  ])
   if (error) console.error(error)
   state.profile = data || { id: state.user.id, name: state.user.email, email: state.user.email }
   renderMe()
-
-  const { data: phone } = await supabase.from('user_phones').select('phone, visible').maybeSingle()
   state.phone = phone || null
 }
 
@@ -552,8 +557,8 @@ function onUpdate(m) {
   if (state.current?.conversation_id === m.conversation_id) {
     const existing = state.msgs.find((x) => x.id === m.id)
     if (existing) {
-      existing.read_at = m.read_at // só o "lida" muda depois de enviada
-      renderMessages(false)
+      existing.read_at = m.read_at // só o "lida" muda depois de enviada: troca só o ✓
+      $('messages').querySelector(`[data-id="${m.id}"] .msg-meta`)?.replaceWith(metaNode(existing))
     }
   }
   scheduleListRefresh()
@@ -572,7 +577,17 @@ async function loadConversations(include) {
   const { data, error } = await supabase.rpc('my_conversations', { p_conv })
   if (error) return console.error(error)
   await Promise.all(data.map(openPreview))
+  listLoaded = true
   state.conversations = data
+  renderConversations()
+  // Guarda no aparelho (junto das chaves; sai ao sair da conta) para abrir rápido da próxima vez.
+  cripto.localSet('lista', { userId: state.user.id, rows: data }).catch(() => {})
+}
+
+async function showSavedConversations() {
+  const saved = await cripto.localGet('lista').catch(() => null)
+  if (saved?.userId !== state.user?.id || listLoaded) return
+  state.conversations = saved.rows
   renderConversations()
 }
 
@@ -861,56 +876,85 @@ function renderChatStatus() {
   status.textContent = typing ? 'digitando…' : state.online.has(state.current.other_id) ? 'online' : ''
 }
 
-function addMessage(m) {
+const dayKey = (m) => new Date(m.created_at).toDateString()
+const isNearBottom = (box) => box.scrollHeight - box.scrollTop - box.clientHeight < 120
+
+// Mensagem nova vai para o fim da conversa: só acrescenta o balão (não redesenha tudo).
+function addMessage(m, forceBottom = false) {
   const existing = state.msgs.find((x) => x.id === m.id)
   if (existing) {
     if (m.localUrl && !existing.localUrl) existing.localUrl = m.localUrl
     return
   }
+  const box = $('messages')
+  const nearBottom = isNearBottom(box)
+  const last = state.msgs[state.msgs.length - 1]
   m.freshAt = Date.now() // acabou de chegar: emoji grande entra "pulando"
   state.msgs.push(m)
-  renderMessages(false)
+  if (!last || dayKey(last) !== dayKey(m)) box.append(el('div', 'day-sep', dayLabel(m.created_at)))
+  box.append(messageNode(m))
+  if (forceBottom || nearBottom) box.scrollTop = box.scrollHeight
 }
 
+// Tira uma mensagem (a provisória "Enviando…") da lista e da tela.
+function removeMessage(m) {
+  state.msgs = state.msgs.filter((x) => x !== m)
+  const node = $('messages').querySelector(`[data-id="${m.id}"]`)
+  if (!node) return
+  const before = node.previousElementSibling
+  const after = node.nextElementSibling
+  node.remove()
+  // Não deixa um "Hoje" sobrando sem mensagens embaixo.
+  if (before?.classList.contains('day-sep') && (!after || after.classList.contains('day-sep'))) before.remove()
+}
+
+function metaNode(m) {
+  const meta = el('div', 'msg-meta', timeFmt.format(new Date(m.created_at)))
+  if (m.sender_id === state.user.id) {
+    const t = m.pending ? '🕓' : m.read_at ? '✓✓' : '✓'
+    meta.append(el('span', m.read_at ? 'ticks read' : 'ticks', t))
+  }
+  return meta
+}
+
+function messageNode(m) {
+  const mine = m.sender_id === state.user.id
+  const bubble = el('div', 'msg' + (mine ? ' me' : '') + (m.pending ? ' pending' : ''))
+  bubble.dataset.id = m.id
+  const emojis = !m.locked && !m.attachment_path && !m.localUrl && emojiOnly(m.body)
+  if (m.locked) {
+    bubble.append(el('span', 'msg-locked', '🔒 Esta mensagem não pode ser aberta neste aparelho.'))
+  } else if (m.attachment_path || m.localUrl) {
+    bubble.append(renderAttachment(m, bubble))
+    if (m.body) bubble.append(el('span', 'msg-text', m.body))
+  } else if (emojis) {
+    // Só emojis: aparecem grandes e se mexendo.
+    bubble.classList.add('emoji-only', 'emoji-' + emojis.length)
+    if (Date.now() - (m.freshAt || 0) < 1000) bubble.classList.add('fresh')
+    for (const g of emojis) bubble.append(el('span', 'big-emoji ' + motionFor(g), g))
+  } else {
+    bubble.append(document.createTextNode(m.body))
+  }
+  bubble.append(metaNode(m))
+  return bubble
+}
+
+// Desenha a conversa inteira (ao abrir, ou quando chegam chaves e mensagens trancadas abrem).
 function renderMessages(forceBottom) {
   const box = $('messages')
-  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120
-  box.replaceChildren()
-
+  const nearBottom = isNearBottom(box)
+  imageObserver.disconnect()
+  const frag = document.createDocumentFragment()
   let lastDay = ''
   for (const m of state.msgs) {
-    const day = new Date(m.created_at).toDateString()
+    const day = dayKey(m)
     if (day !== lastDay) {
-      box.append(el('div', 'day-sep', dayLabel(m.created_at)))
+      frag.append(el('div', 'day-sep', dayLabel(m.created_at)))
       lastDay = day
     }
-
-    const mine = m.sender_id === state.user.id
-    const bubble = el('div', 'msg' + (mine ? ' me' : '') + (m.pending ? ' pending' : ''))
-    if (m.locked) {
-      bubble.append(el('span', 'msg-locked', '🔒 Esta mensagem não pode ser aberta neste aparelho.'))
-    } else if (m.attachment_path || m.localUrl) {
-      bubble.append(renderAttachment(m, bubble))
-      if (m.body) bubble.append(el('span', 'msg-text', m.body))
-    } else if (emojiOnly(m.body)) {
-      // Só emojis: aparecem grandes e se mexendo.
-      const list = emojiOnly(m.body)
-      bubble.classList.add('emoji-only', 'emoji-' + list.length)
-      if (Date.now() - (m.freshAt || 0) < 1000) bubble.classList.add('fresh')
-      for (const g of list) bubble.append(el('span', 'big-emoji ' + motionFor(g), g))
-    } else {
-      bubble.append(document.createTextNode(m.body))
-    }
-
-    const meta = el('div', 'msg-meta', timeFmt.format(new Date(m.created_at)))
-    if (mine) {
-      const t = m.pending ? '🕓' : m.read_at ? '✓✓' : '✓'
-      meta.append(el('span', m.read_at ? 'ticks read' : 'ticks', t))
-    }
-    bubble.append(meta)
-    box.append(bubble)
+    frag.append(messageNode(m))
   }
-
+  box.replaceChildren(frag)
   if (forceBottom || nearBottom) box.scrollTop = box.scrollHeight
 }
 
@@ -954,9 +998,14 @@ function fileUrl(m) {
   const p = (async () => {
     const key = await getKey(m.key_id)
     if (!key) throw new Error('sem chave')
-    const res = await fetch(await attachmentUrl(m.attachment_path))
-    if (!res.ok) throw new Error('download ' + res.status)
-    const plain = await cripto.decryptFile(key, m.conversation_id, await res.arrayBuffer())
+    let sealed = await savedFile(m.attachment_path)
+    if (!sealed) {
+      const res = await fetch(await attachmentUrl(m.attachment_path))
+      if (!res.ok) throw new Error('download ' + res.status)
+      sealed = await res.arrayBuffer()
+      saveFile(m.attachment_path, sealed)
+    }
+    const plain = await cripto.decryptFile(key, m.conversation_id, sealed)
     const url = URL.createObjectURL(new Blob([plain], { type: m.attachment_type || 'application/octet-stream' }))
     urlCache.set(id, { url, blob: true, expires: Infinity })
     return url
@@ -965,6 +1014,40 @@ function fileUrl(m) {
   p.catch(() => urlCache.delete(id))
   return p
 }
+
+// Cópias dos arquivos cifrados guardadas no aparelho (continuam embaralhadas, como no servidor).
+// Assim cada foto é baixada uma vez só. Ficam as 300 mais recentes.
+const FILES_CACHE = 'nexo-arquivos'
+const fileKey = (path) => new URL('nexo-arquivo/' + path, location.href).href
+
+async function savedFile(path) {
+  try {
+    const res = await (await caches.open(FILES_CACHE)).match(fileKey(path))
+    return res ? await res.arrayBuffer() : null
+  } catch {
+    return null
+  }
+}
+
+async function saveFile(path, data) {
+  try {
+    const cache = await caches.open(FILES_CACHE)
+    await cache.put(fileKey(path), new Response(data))
+    const keys = await cache.keys()
+    for (const old of keys.slice(0, Math.max(0, keys.length - 300))) await cache.delete(old)
+  } catch {
+    // sem espaço ou navegação privada: só não guarda
+  }
+}
+
+// Foto só é baixada quando aparece na tela (ou chega perto dela).
+const imageObserver = new IntersectionObserver((entries) => {
+  for (const { isIntersecting, target } of entries) {
+    if (!isIntersecting) continue
+    imageObserver.unobserve(target)
+    fileUrl(target.msg).then((url) => (target.src = url)).catch(() => (target.alt = 'Foto indisponível'))
+  }
+}, { root: $('messages'), rootMargin: '600px 0px' })
 
 function cachedFileUrl(m) {
   return cachedUrl(m.ciphertext ? 'blob:' + m.attachment_path : m.attachment_path)
@@ -994,9 +1077,13 @@ function renderAttachment(m, bubble) {
     const img = el('img', 'msg-img')
     img.alt = m.attachment_name || 'Foto'
     img.draggable = false
+    img.decoding = 'async'
     const ready = m.localUrl || cachedFileUrl(m)
     if (ready) img.src = ready
-    else fileUrl(m).then((url) => (img.src = url)).catch(() => (img.alt = 'Foto indisponível'))
+    else {
+      img.msg = m
+      imageObserver.observe(img)
+    }
     if (!m.pending) img.addEventListener('click', () => openViewer(m))
     return img
   }
@@ -1015,7 +1102,24 @@ function renderAttachment(m, bubble) {
     if (m.ciphertext) a.download = m.attachment_name || 'arquivo'
     const ready = cachedFileUrl(m)
     if (ready) a.href = downloadUrl(m, ready)
-    else fileUrl(m).then((url) => (a.href = downloadUrl(m, url))).catch(() => {})
+    else if (!m.ciphertext) attachmentUrl(m.attachment_path).then((url) => (a.href = withDownload(url, m.attachment_name))).catch(() => {})
+    else {
+      // Arquivo cifrado só é baixado quando a pessoa toca nele.
+      a.href = '#'
+      a.addEventListener('click', async (e) => {
+        if (a.dataset.ready) return
+        e.preventDefault()
+        info.lastChild.textContent = 'Abrindo…'
+        try {
+          a.href = await fileUrl(m)
+          a.dataset.ready = '1'
+          a.click()
+        } catch {
+          toast('Não foi possível abrir o arquivo.')
+        }
+        info.lastChild.textContent = fileSize(m.attachment_size)
+      })
+    }
   }
   return a
 }
@@ -1082,8 +1186,7 @@ async function sendAttachment(original) {
     localUrl: type.startsWith('image/') ? URL.createObjectURL(file) : null,
     pending: true,
   }
-  state.msgs.push(tmp)
-  renderMessages(true)
+  addMessage(tmp, true)
 
   // O arquivo e o nome dele vão cifrados; o caminho no Storage não tem o nome.
   const path = `${conv.conversation_id}/${crypto.randomUUID()}`
@@ -1094,6 +1197,7 @@ async function sendAttachment(original) {
     const sealed = await cripto.encryptFile(key, conv.conversation_id, file)
     const up = await supabase.storage.from('attachments').upload(path, sealed, { contentType: 'application/octet-stream' })
     if (up.error) throw up.error
+    saveFile(path, sealed) // a cópia cifrada fica no aparelho: abre sem baixar de novo
     ;({ data, error } = await supabase
       .from('messages')
       .insert({
@@ -1112,9 +1216,8 @@ async function sendAttachment(original) {
   }
 
   if (state.current !== conv) return
-  state.msgs = state.msgs.filter((m) => m !== tmp)
+  removeMessage(tmp)
   if (error) {
-    renderMessages(false)
     toast('Não foi possível enviar o arquivo: ' + error.message)
     return
   }
@@ -1174,8 +1277,7 @@ $('send-form').addEventListener('submit', async (e) => {
     read_at: null,
     pending: true,
   }
-  state.msgs.push(tmp)
-  renderMessages(true)
+  addMessage(tmp, true)
 
   let data = null
   let error = null
@@ -1195,9 +1297,8 @@ $('send-form').addEventListener('submit', async (e) => {
   }
 
   if (state.current !== conv) return
-  state.msgs = state.msgs.filter((m) => m !== tmp)
+  removeMessage(tmp)
   if (error) {
-    renderMessages(false)
     if (!input.value) input.value = text
     alert('Não foi possível enviar: ' + error.message)
     return
@@ -1481,6 +1582,7 @@ $('logout-btn').addEventListener('click', async () => {
   toggleMenu(false)
   await unsubscribePush()
   await cripto.localClear().catch(() => {}) // as chaves saem do aparelho junto com a conta
+  await caches.delete(FILES_CACHE).catch(() => {})
   await supabase.auth.signOut()
 })
 

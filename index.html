@@ -14,6 +14,17 @@
   <meta name="apple-mobile-web-app-title" content="Nexo">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="stylesheet" href="css/style.css">
+  <!-- Abre as conexões e baixa os arquivos do app em paralelo, antes de precisar deles. -->
+  <link rel="preconnect" href="https://ngfyqbcqkecudbkdvqph.supabase.co" crossorigin>
+  <link rel="modulepreload" href="js/app.js">
+  <link rel="modulepreload" href="js/config.js">
+  <link rel="modulepreload" href="js/cripto.js">
+  <link rel="modulepreload" href="js/emoji.js">
+  <!-- Biblioteca do Supabase num arquivo só. "integrity" garante que é exatamente este arquivo:
+       se o site de onde vem mudar uma vírgula, o navegador não roda. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/dist/umd/supabase.js"
+          integrity="sha384-xPW3QHswsICVC2mW6BFNwMbhpLkbZ133fKOhxNx3QGGgAOJfL3O9t8r2aWn1aez6"
+          crossorigin="anonymous" defer></script>
 </head>
 <body>
   <!-- Carregando -->
