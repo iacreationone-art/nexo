@@ -168,7 +168,7 @@ async function loadProfile() {
   const { data, error } = await supabase.from('profiles').select('*').eq('id', state.user.id).single()
   if (error) console.error(error)
   state.profile = data || { id: state.user.id, name: state.user.email, email: state.user.email }
-  avatar($('me-btn'), state.profile.name, state.profile.id, state.profile.avatar_url)
+  renderMe()
 }
 
 // ---------- Tempo real ----------
@@ -233,7 +233,13 @@ function renderConversations() {
   list.replaceChildren()
   $('conv-empty').hidden = state.conversations.length > 0
 
-  for (const c of state.conversations) {
+  const q = normalize($('search-input').value.trim())
+  const shown = q
+    ? state.conversations.filter((c) => normalize(`${c.other_name} ${c.last_body || ''}`).includes(q))
+    : state.conversations
+  $('search-empty').hidden = !q || shown.length > 0 || state.conversations.length === 0
+
+  for (const c of shown) {
     const li = el('li', 'conv-item')
     if (c.conversation_id === state.current?.conversation_id) li.classList.add('active')
     if (c.unread > 0) li.classList.add('unread')
@@ -260,6 +266,13 @@ function renderConversations() {
     list.append(li)
   }
 }
+
+// Pesquisa sem diferenciar maiúsculas nem acentos ("joao" encontra "João").
+function normalize(text) {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+$('search-input').addEventListener('input', renderConversations)
 
 // ---------- Conversa ----------
 
@@ -491,28 +504,141 @@ $('new-chat-form').addEventListener('submit', async (e) => {
 
 // ---------- Perfil ----------
 
-$('me-btn').addEventListener('click', () => {
+function renderMe() {
+  const p = state.profile
+  avatar($('me-btn'), p.name, p.id, p.avatar_url)
+  avatar($('menu-avatar'), p.name, p.id, p.avatar_url)
+  avatar($('profile-avatar'), p.name, p.id, p.avatar_url)
+  $('menu-name').textContent = p.name
+  $('menu-email').textContent = p.email
+  $('photo-remove').hidden = !p.avatar_url
+}
+
+let toastTimer = null
+function toast(text) {
+  const t = $('toast')
+  t.textContent = text
+  t.hidden = false
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (t.hidden = true), 3500)
+}
+
+// Menu do usuário
+function toggleMenu(open) {
+  $('user-menu').hidden = !open
+  $('me-btn').setAttribute('aria-expanded', String(open))
+  if (open) updateNotifyBtn()
+}
+
+$('me-btn').addEventListener('click', (e) => {
+  e.stopPropagation()
+  toggleMenu($('user-menu').hidden)
+})
+document.addEventListener('click', (e) => {
+  if (!$('user-menu').hidden && !e.target.closest('.menu-wrap')) toggleMenu(false)
+})
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('user-menu').hidden) toggleMenu(false)
+})
+
+$('menu-profile').addEventListener('click', () => {
+  toggleMenu(false)
   $('profile-name').value = state.profile.name
-  $('profile-email').textContent = state.profile.email
+  $('profile-about').value = state.profile.about || ''
+  $('profile-email').value = state.profile.email
   setMsg($('profile-msg'), '')
-  updateNotifyBtn()
+  renderMe()
   $('profile-dialog').showModal()
 })
 
 $('profile-form').addEventListener('submit', async (e) => {
   e.preventDefault()
-  const name = $('profile-name').value.trim()
-  const { error } = await supabase.from('profiles').update({ name }).eq('id', state.user.id)
+  const changes = {
+    name: $('profile-name').value.trim(),
+    about: $('profile-about').value.trim() || null,
+  }
+  if (!changes.name) return setMsg($('profile-msg'), 'Digite seu nome.', true)
+  const { error } = await supabase.from('profiles').update(changes).eq('id', state.user.id)
   if (error) return setMsg($('profile-msg'), error.message, true)
-  state.profile.name = name
-  avatar($('me-btn'), name, state.profile.id, state.profile.avatar_url)
+  Object.assign(state.profile, changes)
+  renderMe()
   $('profile-dialog').close()
+  toast('Perfil salvo')
 })
 
 $('logout-btn').addEventListener('click', async () => {
-  $('profile-dialog').close()
+  toggleMenu(false)
   await unsubscribePush()
   await supabase.auth.signOut()
+})
+
+// Foto de perfil: recorta em quadrado, reduz para 512px e envia ao Storage.
+function squareJpeg(file, size = 512) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const side = Math.min(img.naturalWidth, img.naturalHeight)
+      const out = Math.min(size, side)
+      const canvas = document.createElement('canvas')
+      canvas.width = canvas.height = out
+      canvas.getContext('2d').drawImage(
+        img,
+        (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side,
+        0, 0, out, out,
+      )
+      URL.revokeObjectURL(img.src)
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('imagem inválida'))), 'image/jpeg', 0.85)
+    }
+    img.onerror = () => reject(new Error('Não foi possível ler essa imagem.'))
+    img.src = URL.createObjectURL(file)
+  })
+}
+
+async function clearOldPhotos(keep) {
+  const folder = state.user.id
+  const { data } = await supabase.storage.from('avatars').list(folder)
+  const old = (data || []).map((f) => `${folder}/${f.name}`).filter((path) => path !== keep)
+  if (old.length) await supabase.storage.from('avatars').remove(old)
+}
+
+async function setAvatarUrl(url) {
+  const { error } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', state.user.id)
+  if (error) throw error
+  state.profile.avatar_url = url
+  renderMe()
+}
+
+$('photo-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0]
+  e.target.value = ''
+  if (!file) return
+  const wrap = document.querySelector('.photo-wrap')
+  wrap.classList.add('loading')
+  setMsg($('profile-msg'), 'Enviando foto…')
+  try {
+    const blob = await squareJpeg(file)
+    const path = `${state.user.id}/${Date.now()}.jpg`
+    const { error } = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg' })
+    if (error) throw error
+    const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+    await setAvatarUrl(data.publicUrl)
+    await clearOldPhotos(path)
+    setMsg($('profile-msg'), 'Foto atualizada.')
+  } catch (err) {
+    setMsg($('profile-msg'), 'Não foi possível enviar a foto: ' + err.message, true)
+  } finally {
+    wrap.classList.remove('loading')
+  }
+})
+
+$('photo-remove').addEventListener('click', async () => {
+  try {
+    await setAvatarUrl(null)
+    await clearOldPhotos(null)
+    setMsg($('profile-msg'), 'Foto removida.')
+  } catch (err) {
+    setMsg($('profile-msg'), err.message, true)
+  }
 })
 
 document.querySelectorAll('[data-close]').forEach((b) =>
@@ -571,23 +697,24 @@ async function unsubscribePush() {
 
 function updateNotifyBtn() {
   const btn = $('notify-btn')
+  const label = $('notify-label')
   btn.hidden = false
   btn.disabled = false
   if (!pushSupported) {
     if (isIOS && !isStandalone) {
-      btn.textContent = 'No iPhone, instale o app na tela inicial para receber notificações'
+      label.textContent = 'Instale na tela inicial para receber notificações'
       btn.disabled = true
     } else {
       btn.hidden = true
     }
   } else if (Notification.permission === 'denied') {
-    btn.textContent = 'Notificações bloqueadas no navegador'
+    label.textContent = 'Notificações bloqueadas'
     btn.disabled = true
   } else if (Notification.permission === 'granted') {
-    btn.textContent = 'Notificações ativadas ✓'
+    label.textContent = 'Notificações ativadas ✓'
     btn.disabled = true
   } else {
-    btn.textContent = 'Ativar notificações'
+    label.textContent = 'Ativar notificações'
   }
 }
 
@@ -596,9 +723,9 @@ $('notify-btn').addEventListener('click', async () => {
   if (permission === 'granted') {
     try {
       await subscribePush()
-      setMsg($('profile-msg'), 'Pronto! Você vai receber avisos de mensagens novas.')
+      toast('Pronto! Você vai receber avisos de mensagens novas.')
     } catch (err) {
-      setMsg($('profile-msg'), 'Não foi possível ativar: ' + err.message, true)
+      toast('Não foi possível ativar: ' + err.message)
     }
   }
   updateNotifyBtn()
