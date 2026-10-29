@@ -610,14 +610,30 @@ dialog form { display: grid; gap: 10px; }
 dialog label { display: grid; gap: 6px; font-weight: 600; }
 .dialog-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 6px; }
 
-/* Menu da mensagem: sobe de baixo, como no celular */
+/* Menu da mensagem: sobe de baixo, como no celular.
+   O diálogo ocupa só a parte visível da tela (sem o teclado) e o cartão fica no pé dela. */
 dialog.msg-menu {
-  margin: auto auto max(12px, env(safe-area-inset-bottom));
+  top: var(--app-top, 0px);
+  bottom: auto;
+  width: 100%;
+  max-width: none;
+  height: var(--app-h, 100dvh);
+  max-height: none;
+  margin: 0;
+  padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+  background: transparent;
+  box-sizing: border-box;
+}
+dialog.msg-menu[open] { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.msg-menu-body {
+  display: grid;
+  width: min(380px, 100%);
   padding: 6px;
-  width: min(380px, calc(100% - 24px));
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .25);
   animation: emoji-panel-in .18s ease-out;
 }
-.msg-menu-body { display: grid; }
 .msg-menu-body button {
   border: 0;
   background: none;

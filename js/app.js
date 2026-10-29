@@ -1257,6 +1257,9 @@ function openMsgMenu(bubble) {
   const mine = m.sender_id === state.user.id
   $('msg-copy').hidden = !(m.body && !m.deleted_at && !m.locked && !stickerOf(m.body))
   $('msg-delete-all').hidden = !mine || !!m.deleted_at
+  // Fecha o teclado e o painel de emojis: senão eles cobrem as opções de baixo do menu.
+  document.activeElement?.blur()
+  emojiPicker.close()
   $('msg-menu').showModal()
 }
 
