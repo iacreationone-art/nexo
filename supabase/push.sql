@@ -56,7 +56,7 @@ begin
   end if;
 
   perform net.http_post(
-    url     := 'https://ngfyqbcqkecudbkdvqph.supabase.co/functions/v1/send-push',
+    url     := 'https://ngfyqbcqkecudbkdvqph.supabase.co/functions/v1/bright-responder',
     body    := jsonb_build_object('message_id', new.id),
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-push-secret', v_secret)
   );
