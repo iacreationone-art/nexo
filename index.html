@@ -13,6 +13,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Nexo">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <!-- Tema escolhido (claro/escuro) aplicado antes de desenhar, para a tela não piscar. -->
+  <script>try { const t = localStorage.getItem('nexo-tema'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t } catch {}</script>
   <link rel="stylesheet" href="css/style.css">
   <!-- Abre as conexões e baixa os arquivos do app em paralelo, antes de precisar deles. -->
   <link rel="preconnect" href="https://ngfyqbcqkecudbkdvqph.supabase.co" crossorigin>
@@ -75,6 +77,14 @@
       <header class="bar brand-bar">
         <img src="icons/icon.svg" alt="" width="34" height="34" class="brand-logo">
         <h2 class="brand-name">Nexo</h2>
+        <div class="theme-switch" role="group" aria-label="Tema">
+          <button type="button" data-set-theme="light" title="Tema claro" aria-label="Tema claro" aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" data-set-theme="dark" title="Tema escuro" aria-label="Tema escuro" aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.5 8.5 0 1 0 11.1 11.1z"/></svg>
+          </button>
+        </div>
         <div class="menu-wrap">
           <button id="me-btn" class="avatar-btn" title="Menu" aria-label="Abrir menu" aria-haspopup="menu" aria-expanded="false"></button>
           <div id="user-menu" class="menu" role="menu" hidden>

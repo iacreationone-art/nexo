@@ -2152,6 +2152,27 @@ navigator.serviceWorker?.addEventListener('message', (e) => {
   if (e.data?.open) openById(e.data.open)
 })
 
+// ---------- Tema claro / escuro (sol e lua na barra de cima) ----------
+// Sem escolha, segue o celular. A escolha fica guardada (e o index.html a aplica antes de desenhar).
+
+const darkQuery = matchMedia('(prefers-color-scheme: dark)')
+const currentTheme = () => document.documentElement.dataset.theme || (darkQuery.matches ? 'dark' : 'light')
+
+function showTheme() {
+  const t = currentTheme()
+  document.querySelectorAll('[data-set-theme]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.setTheme === t)))
+}
+
+document.querySelectorAll('[data-set-theme]').forEach((b) =>
+  b.addEventListener('click', () => {
+    document.documentElement.dataset.theme = b.dataset.setTheme
+    try { localStorage.setItem('nexo-tema', b.dataset.setTheme) } catch {}
+    showTheme()
+  }),
+)
+darkQuery.addEventListener('change', showTheme)
+showTheme()
+
 // ---------- Instalar na tela inicial ----------
 
 let installEvent = null

@@ -230,6 +230,29 @@ body.in-chat .chat { display: flex; }
 .brand-logo { border-radius: 9px; flex: none; }
 .bar h2.brand-name { font-size: 1.35rem; font-weight: 800; letter-spacing: -.02em; color: var(--primary); }
 
+/* Sol e lua: escolhe o tema claro ou escuro (o marcado é o que está valendo) */
+.theme-switch {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.theme-switch button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  transition: background .15s, color .15s;
+}
+.theme-switch button[aria-pressed="true"] { background: var(--surface); color: var(--primary); box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }
+.theme-switch button[data-set-theme="light"][aria-pressed="true"] { color: #f5a524; }
+
 /* ---------- Menu do usuário ---------- */
 
 .menu-wrap { position: relative; flex: none; display: flex; }
