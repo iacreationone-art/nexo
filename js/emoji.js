@@ -1,6 +1,8 @@
 // Emojis do Nexo: painel para escolher, emojis grandes e animados nas mensagens
 // e "chuva" de emojis. Tudo local (sem baixar imagens de fora), então nada vaza da criptografia.
 
+import { STICKER_NAMES, stickerSvg, stickerLabel } from './figurinhas.js'
+
 const CATEGORIES = [
   { icon: '🕘', name: 'Recentes', list: [] },
   { icon: '😀', name: 'Carinhas', list: '😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🫠 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😮‍💨 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🥵 🥶 🥴 😵‍💫 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 🙁 😮 😯 😲 😳 🥺 🥹 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 💩 🤡 👻 👽 🤖 😺 😹 😻' },
@@ -9,6 +11,7 @@ const CATEGORIES = [
   { icon: '🐶', name: 'Natureza', list: '🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🐤 🦆 🦅 🦉 🦇 🐺 🐴 🦄 🐝 🦋 🐌 🐞 🐢 🐍 🦖 🐙 🦀 🐠 🐬 🐳 🦈 🐊 🦒 🐘 🌸 🌹 🌻 🌷 🌵 🌴 🍀 🌈 ⭐ 🌟 🌙 ☀️ ⛅ 🌧️ ⚡ 🔥 ❄️ ☃️ 🌊' },
   { icon: '🍕', name: 'Comida', list: '🍎 🍌 🍉 🍇 🍓 🍒 🍑 🥭 🍍 🥥 🥑 🍅 🌽 🥕 🍞 🧀 🥚 🍳 🥓 🍔 🍟 🍕 🌭 🌮 🌯 🍝 🍜 🍣 🍤 🍦 🍩 🍪 🎂 🍰 🧁 🍫 🍬 🍿 ☕ 🍵 🧃 🥤 🍺 🍻 🥂 🍷 🍹' },
   { icon: '🎉', name: 'Festa', list: '🎉 🎊 🥳 🎈 🎁 🎂 🎄 🎃 ✨ 🎆 🎇 🏆 🥇 ⚽ 🏀 🏐 🎾 🎮 🎲 🎯 🎸 🎤 🎧 🎬 🚀 ✈️ 🚗 🏖️ 🏝️ ⛰️ 🏠 💡 📱 💻 📷 ⏰ 💰 💸 📌 ✅ ❌ ⚠️ ❓ ❗ 🆗 🆒 🆕 🇧🇷' },
+  { icon: 'bolota-oi', name: 'Figurinhas', stickers: true, list: STICKER_NAMES },
 ]
 for (const c of CATEGORIES) if (typeof c.list === 'string') c.list = c.list.split(' ')
 
@@ -105,7 +108,7 @@ function saveRecent(emoji) {
   CATEGORIES[0].list = list
 }
 
-export function setupEmojiPicker({ input, button, panel }) {
+export function setupEmojiPicker({ input, button, panel, onSticker }) {
   CATEGORIES[0].list = loadRecent()
   const tabs = document.createElement('div')
   tabs.className = 'emoji-tabs'
@@ -119,8 +122,9 @@ export function setupEmojiPicker({ input, button, panel }) {
     current = i
     tabs.querySelectorAll('button').forEach((b, j) => b.setAttribute('aria-selected', String(j === i)))
     grid.replaceChildren()
-    const { list, name } = CATEGORIES[i]
+    const { list, name, stickers } = CATEGORIES[i]
     grid.setAttribute('aria-label', name)
+    grid.classList.toggle('stickers', !!stickers)
     if (!list.length) {
       const p = document.createElement('p')
       p.className = 'emoji-empty'
@@ -131,7 +135,13 @@ export function setupEmojiPicker({ input, button, panel }) {
       const b = document.createElement('button')
       b.type = 'button'
       b.className = 'emoji-cell'
-      b.textContent = emoji
+      if (stickers) {
+        // Figurinha: toca e já envia.
+        b.classList.add('sticker-cell')
+        b.dataset.fig = emoji
+        b.title = stickerLabel(emoji)
+        b.innerHTML = stickerSvg(emoji)
+      } else b.textContent = emoji
       grid.append(b)
     }
     grid.scrollTop = 0
@@ -141,7 +151,8 @@ export function setupEmojiPicker({ input, button, panel }) {
     const b = document.createElement('button')
     b.type = 'button'
     b.className = 'emoji-tab'
-    b.textContent = c.icon
+    if (c.stickers) b.innerHTML = stickerSvg(c.icon)
+    else b.textContent = c.icon
     b.title = c.name
     b.setAttribute('role', 'tab')
     b.setAttribute('aria-label', c.name)
@@ -152,6 +163,13 @@ export function setupEmojiPicker({ input, button, panel }) {
   grid.addEventListener('click', (e) => {
     const cell = e.target.closest('.emoji-cell')
     if (!cell) return
+    if (cell.dataset.fig) {
+      cell.classList.remove('pop')
+      void cell.offsetWidth // reinicia a animação
+      cell.classList.add('pop')
+      onSticker?.(cell.dataset.fig)
+      return
+    }
     const emoji = cell.textContent
     const start = input.selectionStart ?? input.value.length
     const end = input.selectionEnd ?? start

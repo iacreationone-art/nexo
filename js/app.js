@@ -1,6 +1,7 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY, VAPID_PUBLIC_KEY } from './config.js'
 import * as cripto from './cripto.js'
 import { emojiOnly, motionFor, emojiRain, setupEmojiPicker } from './emoji.js'
+import { stickerOf, stickerText, stickerSvg, stickerRain } from './figurinhas.js'
 
 const $ = (id) => document.getElementById(id)
 const configured = !SUPABASE_URL.includes('SEU-PROJETO') && !SUPABASE_ANON_KEY.includes('SUA_ANON_KEY')
@@ -546,7 +547,7 @@ async function onInsert(m) {
 
   if (isOpen) await openMessage(m)
   if (isOpen && state.current?.conversation_id === m.conversation_id) {
-    if (!mine && !state.msgs.some((x) => x.id === m.id)) emojiRain($('chat-view'), emojiOnly(m.body))
+    if (!mine && !state.msgs.some((x) => x.id === m.id)) emojiRain($('chat-view'), emojiOnly(m.body) || stickerRain(m.body))
     addMessage(m)
     if (!mine && document.visibilityState === 'visible') await markRead()
   }
@@ -598,7 +599,7 @@ async function openPreview(c) {
     const key = await getKey(c.last_key)
     if (!key) throw new Error('sem chave')
     const p = await cripto.decryptMessage(key, c.conversation_id, c.last_body)
-    c.last_body = !p.n ? p.t : (p.y || '').startsWith('image/') ? '📷 Foto' : '📎 ' + p.n
+    c.last_body = !p.n ? (stickerOf(p.t) ? '🎭 Figurinha' : p.t) : (p.y || '').startsWith('image/') ? '📷 Foto' : '📎 ' + p.n
   } catch {
     c.last_body = '🔒 Mensagem protegida'
   }
@@ -921,12 +922,21 @@ function messageNode(m) {
   const mine = m.sender_id === state.user.id
   const bubble = el('div', 'msg' + (mine ? ' me' : '') + (m.pending ? ' pending' : ''))
   bubble.dataset.id = m.id
-  const emojis = !m.locked && !m.attachment_path && !m.localUrl && emojiOnly(m.body)
+  const plain = !m.locked && !m.attachment_path && !m.localUrl
+  const fig = plain && stickerOf(m.body)
+  const emojis = plain && !fig && emojiOnly(m.body)
   if (m.locked) {
     bubble.append(el('span', 'msg-locked', '🔒 Esta mensagem não pode ser aberta neste aparelho.'))
   } else if (m.attachment_path || m.localUrl) {
     bubble.append(renderAttachment(m, bubble))
     if (m.body) bubble.append(el('span', 'msg-text', m.body))
+  } else if (fig) {
+    // Figurinha da Turma do Nexo: desenho animado, sem balão.
+    bubble.classList.add('emoji-only', 'sticker')
+    if (Date.now() - (m.freshAt || 0) < 1000) bubble.classList.add('fresh')
+    const art = el('div', 'sticker-art')
+    art.innerHTML = stickerSvg(fig) // desenho nosso, escolhido pelo nome (nunca texto de quem enviou)
+    bubble.append(art)
   } else if (emojis) {
     // Só emojis: aparecem grandes e se mexendo.
     bubble.classList.add('emoji-only', 'emoji-' + emojis.length)
@@ -1238,7 +1248,12 @@ $('file-input').addEventListener('change', async (e) => {
 // ---------- Enviar ----------
 
 const input = $('msg-input')
-const emojiPicker = setupEmojiPicker({ input, button: $('emoji-btn'), panel: $('emoji-panel') })
+const emojiPicker = setupEmojiPicker({
+  input,
+  button: $('emoji-btn'),
+  panel: $('emoji-panel'),
+  onSticker: (name) => sendText(stickerText(name)),
+})
 
 function autosize() {
   input.style.height = 'auto'
@@ -1260,14 +1275,19 @@ input.addEventListener('keydown', (e) => {
   }
 })
 
-$('send-form').addEventListener('submit', async (e) => {
+$('send-form').addEventListener('submit', (e) => {
   e.preventDefault()
   const text = input.value.trim()
-  const conv = state.current
-  if (!text || !conv) return
+  if (!text || !state.current) return
   input.value = ''
   autosize()
+  sendText(text)
+})
 
+// Envia um texto (ou o código de uma figurinha) na conversa aberta.
+async function sendText(text) {
+  const conv = state.current
+  if (!conv) return
   const tmp = {
     id: 'tmp-' + ++tmpSeq,
     conversation_id: conv.conversation_id,
@@ -1299,15 +1319,15 @@ $('send-form').addEventListener('submit', async (e) => {
   if (state.current !== conv) return
   removeMessage(tmp)
   if (error) {
-    if (!input.value) input.value = text
+    if (!input.value && !stickerOf(text)) input.value = text
     alert('Não foi possível enviar: ' + error.message)
     return
   }
   data.body = text
   addMessage(data)
-  emojiRain($('chat-view'), emojiOnly(text))
+  emojiRain($('chat-view'), emojiOnly(text) || stickerRain(text))
   scheduleListRefresh()
-})
+}
 
 // ---------- Navegação (botão voltar do celular) ----------
 

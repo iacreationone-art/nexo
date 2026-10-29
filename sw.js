@@ -1,6 +1,6 @@
 // Service worker do Nexo: permite instalar o site como app e abrir a tela mesmo sem internet.
 // Ao mudar arquivos do app, aumente a versão: o celular baixa tudo de novo de uma vez.
-const CACHE = 'nexo-v16'
+const CACHE = 'nexo-v17'
 const SHELL = [
   './',
   'index.html',
@@ -9,6 +9,7 @@ const SHELL = [
   'js/config.js',
   'js/cripto.js',
   'js/emoji.js',
+  'js/figurinhas.js',
   'manifest.json',
   'icons/icon.svg',
   'icons/icon-192.png',
@@ -84,6 +85,7 @@ async function openPushText(data) {
     )
     const p = JSON.parse(new TextDecoder().decode(plain))
     if (p.n) return (p.y || '').startsWith('image/') ? '📷 Foto' : '📎 ' + p.n
+    if (/^:fig:[a-z-]+:$/.test(p.t.trim())) return '🎭 Figurinha'
     return p.t.length > 200 ? p.t.slice(0, 200) + '…' : p.t
   } catch {
     return null
