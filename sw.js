@@ -1,6 +1,6 @@
 // Service worker do Nexo: permite instalar o site como app e abrir a tela mesmo sem internet.
 // Ao mudar arquivos do app, aumente a versão para forçar a atualização do cache.
-const CACHE = 'nexo-v14'
+const CACHE = 'nexo-v15'
 const SHELL = [
   './',
   'index.html',
@@ -8,6 +8,7 @@ const SHELL = [
   'js/app.js',
   'js/config.js',
   'js/cripto.js',
+  'js/emoji.js',
   'manifest.json',
   'icons/icon.svg',
   'icons/icon-192.png',

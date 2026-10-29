@@ -460,7 +460,7 @@ body.in-chat .chat { display: flex; }
 }
 .chat-placeholder img { opacity: .5; }
 
-.chat-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.chat-view { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
 .chat-contact {
   flex: 1;
   min-width: 0;
@@ -801,3 +801,121 @@ dialog.viewer[open] { display: flex; align-items: center; justify-content: cente
   color: var(--primary);
 }
 .msg-locked { font-style: italic; opacity: .75; }
+
+/* ---------- Emojis ---------- */
+
+.emoji-btn { border: 0; background: none; margin-left: -6px; }
+.emoji-btn.active { color: var(--primary); background: var(--surface-2); }
+
+.emoji-panel {
+  display: flex;
+  flex-direction: column;
+  height: 270px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  animation: emoji-panel-in .18s ease-out;
+}
+@keyframes emoji-panel-in { from { transform: translateY(14px); opacity: 0; } }
+.emoji-tabs { display: flex; gap: 2px; padding: 6px 8px 4px; border-bottom: 1px solid var(--border); }
+.emoji-tab {
+  flex: 1;
+  border: 0;
+  background: none;
+  font-size: 1.35rem;
+  padding: 4px 0;
+  border-radius: 10px;
+  filter: grayscale(.7);
+  opacity: .7;
+  transition: transform .15s, filter .15s, opacity .15s;
+}
+.emoji-tab[aria-selected="true"] { background: var(--surface-2); filter: none; opacity: 1; transform: scale(1.1); }
+.emoji-grid {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  align-content: start;
+  padding: 6px 8px;
+}
+.emoji-cell {
+  border: 0;
+  background: none;
+  font-size: 1.75rem;
+  height: 46px;
+  border-radius: 12px;
+  transition: transform .12s;
+}
+.emoji-cell:hover { background: var(--surface-2); transform: scale(1.18); }
+.emoji-cell:active { transform: scale(.85); }
+.emoji-cell.pop { animation: em-pop .35s cubic-bezier(.3, 1.8, .5, 1); }
+.emoji-empty { grid-column: 1 / -1; text-align: center; color: var(--muted); font-size: .9rem; margin-top: 40px; }
+
+/* Mensagem só de emojis: grandes e animados */
+.msg.emoji-only { background: none; box-shadow: none; padding: 0 2px; white-space: normal; }
+.msg.emoji-only .msg-meta {
+  justify-content: flex-end;
+  width: fit-content;
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+}
+.big-emoji {
+  display: inline-block;
+  font-size: 3rem;
+  line-height: 1.2;
+  padding: 2px;
+  animation: var(--em) var(--em-dur, 2.4s) ease-in-out infinite;
+}
+.emoji-1 .big-emoji { font-size: 4.2rem; }
+.emoji-3 .big-emoji { font-size: 2.6rem; }
+.big-emoji:nth-child(2) { animation-delay: .15s; }
+.big-emoji:nth-child(3) { animation-delay: .3s; }
+.msg.fresh .big-emoji {
+  animation: em-pop .5s cubic-bezier(.3, 1.7, .5, 1) backwards, var(--em) var(--em-dur, 2.4s) ease-in-out .5s infinite;
+}
+
+.em-bob     { --em: em-bob; }
+.em-beat    { --em: em-beat; --em-dur: 1.1s; }
+.em-laugh   { --em: em-laugh; --em-dur: .7s; }
+.em-wave    { --em: em-wave; --em-dur: 1.5s; transform-origin: 70% 85%; }
+.em-flicker { --em: em-flicker; --em-dur: .9s; transform-origin: 50% 90%; }
+.em-jump    { --em: em-jump; --em-dur: 1s; transform-origin: 50% 100%; }
+.em-spin    { --em: em-spin; --em-dur: 2.2s; }
+.em-pump    { --em: em-pump; --em-dur: .9s; transform-origin: 50% 90%; }
+.em-cry     { --em: em-cry; --em-dur: 1.8s; }
+.em-angry   { --em: em-angry; --em-dur: .35s; }
+.em-shy     { --em: em-shy; --em-dur: 2s; }
+
+@keyframes em-pop { 0% { transform: scale(0) rotate(-20deg); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes em-bob { 50% { transform: translateY(-5px) rotate(3deg); } }
+@keyframes em-beat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.25); } 30% { transform: scale(1); } 45% { transform: scale(1.15); } 60% { transform: scale(1); } }
+@keyframes em-laugh { 0%, 100% { transform: rotate(-10deg) translateY(0); } 50% { transform: rotate(10deg) translateY(-6px); } }
+@keyframes em-wave { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(22deg); } 20%, 40% { transform: rotate(-10deg); } }
+@keyframes em-flicker { 0%, 100% { transform: scale(1, 1); } 25% { transform: scale(1.06, .94) skewX(-3deg); } 50% { transform: scale(.96, 1.08) skewX(3deg); } 75% { transform: scale(1.04, .97); } }
+@keyframes em-jump { 0%, 100% { transform: translateY(0) scale(1); } 15% { transform: translateY(0) scale(1.15, .85); } 45% { transform: translateY(-16px) scale(.95, 1.08) rotate(-6deg); } 70% { transform: translateY(0) scale(1.08, .92); } }
+@keyframes em-spin { 0%, 30% { transform: rotate(0) scale(1); } 65% { transform: rotate(360deg) scale(1.15); } 100% { transform: rotate(360deg) scale(1); } }
+@keyframes em-pump { 0%, 100% { transform: translateY(0) rotate(0); } 40% { transform: translateY(-8px) rotate(-12deg) scale(1.1); } }
+@keyframes em-cry { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-3px) rotate(-3deg); } 40% { transform: translateX(3px) rotate(3deg); } 60% { transform: translateY(2px); } }
+@keyframes em-angry { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px) rotate(-2deg); } 75% { transform: translateX(3px) rotate(2deg); } }
+@keyframes em-shy { 0%, 100% { transform: rotate(0) scale(1); } 50% { transform: rotate(-8deg) scale(.94); } }
+
+/* Chuva de emojis */
+.emoji-rain { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 5; }
+.emoji-rain span {
+  position: absolute;
+  bottom: -60px;
+  animation: em-rise 2.6s ease-out forwards;
+  opacity: 0;
+}
+@keyframes em-rise {
+  0% { transform: translate(0, 0) rotate(0) scale(.6); opacity: 0; }
+  12% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { transform: translate(var(--sway), -105vh) rotate(var(--turn)) scale(1.1); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .big-emoji, .msg.fresh .big-emoji, .emoji-panel, .emoji-cell.pop { animation: none; }
+}

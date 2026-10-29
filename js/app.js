@@ -1,6 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/+esm'
 import { SUPABASE_URL, SUPABASE_ANON_KEY, VAPID_PUBLIC_KEY } from './config.js'
 import * as cripto from './cripto.js'
+import { emojiOnly, motionFor, emojiRain, setupEmojiPicker } from './emoji.js'
 
 const $ = (id) => document.getElementById(id)
 const configured = !SUPABASE_URL.includes('SEU-PROJETO') && !SUPABASE_ANON_KEY.includes('SUA_ANON_KEY')
@@ -540,6 +541,7 @@ async function onInsert(m) {
 
   if (isOpen) await openMessage(m)
   if (isOpen && state.current?.conversation_id === m.conversation_id) {
+    if (!mine && !state.msgs.some((x) => x.id === m.id)) emojiRain($('chat-view'), emojiOnly(m.body))
     addMessage(m)
     if (!mine && document.visibilityState === 'visible') await markRead()
   }
@@ -789,6 +791,7 @@ function closeConversation(resetView = true) {
   state.typingUntil = 0
   state.contact = null
   $('call-btn').hidden = true
+  emojiPicker.close()
   if (!resetView) return
   document.body.classList.remove('in-chat')
   $('chat-view').hidden = true
@@ -864,6 +867,7 @@ function addMessage(m) {
     if (m.localUrl && !existing.localUrl) existing.localUrl = m.localUrl
     return
   }
+  m.freshAt = Date.now() // acabou de chegar: emoji grande entra "pulando"
   state.msgs.push(m)
   renderMessages(false)
 }
@@ -888,6 +892,12 @@ function renderMessages(forceBottom) {
     } else if (m.attachment_path || m.localUrl) {
       bubble.append(renderAttachment(m, bubble))
       if (m.body) bubble.append(el('span', 'msg-text', m.body))
+    } else if (emojiOnly(m.body)) {
+      // Só emojis: aparecem grandes e se mexendo.
+      const list = emojiOnly(m.body)
+      bubble.classList.add('emoji-only', 'emoji-' + list.length)
+      if (Date.now() - (m.freshAt || 0) < 1000) bubble.classList.add('fresh')
+      for (const g of list) bubble.append(el('span', 'big-emoji ' + motionFor(g), g))
     } else {
       bubble.append(document.createTextNode(m.body))
     }
@@ -1125,6 +1135,7 @@ $('file-input').addEventListener('change', async (e) => {
 // ---------- Enviar ----------
 
 const input = $('msg-input')
+const emojiPicker = setupEmojiPicker({ input, button: $('emoji-btn'), panel: $('emoji-panel') })
 
 function autosize() {
   input.style.height = 'auto'
@@ -1193,6 +1204,7 @@ $('send-form').addEventListener('submit', async (e) => {
   }
   data.body = text
   addMessage(data)
+  emojiRain($('chat-view'), emojiOnly(text))
   scheduleListRefresh()
 })
 
