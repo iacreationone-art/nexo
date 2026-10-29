@@ -1,6 +1,6 @@
 // Service worker do Nexo: permite instalar o site como app e abrir a tela mesmo sem internet.
 // Ao mudar arquivos do app, aumente a versão para forçar a atualização do cache.
-const CACHE = 'nexo-v11'
+const CACHE = 'nexo-v12'
 const SHELL = [
   './',
   'index.html',
@@ -11,6 +11,7 @@ const SHELL = [
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  'icons/badge-96.png',
 ]
 
 self.addEventListener('install', (e) => {
@@ -65,8 +66,7 @@ self.addEventListener('push', (e) => {
         body: data.body || 'Nova mensagem',
         tag: data.conversation_id,
         renotify: true,
-        icon: 'icons/icon-192.png',
-        badge: 'icons/icon-192.png',
+        badge: 'icons/badge-96.png', // só a silhueta branca: o Android pinta o resto
         data: { conversation_id: data.conversation_id },
       })
     })
