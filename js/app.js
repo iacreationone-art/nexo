@@ -1131,7 +1131,12 @@ function renderAttachment(m, bubble) {
       imageObserver.observe(img)
     }
     if (!m.pending) img.addEventListener('click', () => openViewer(m))
-    return img
+    if (!m.stickerAnim) return img
+    // Recorte animado: caixa de tamanho fixo com folga, para o movimento caber nela
+    // (sem criar barra de rolagem e sem ser cortado).
+    const box = el('div', 'cut-box')
+    box.append(img)
+    return box
   }
 
   const a = el('a', 'msg-file')

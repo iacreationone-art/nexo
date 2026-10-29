@@ -482,6 +482,7 @@ body.in-chat .chat { display: flex; }
 
 .messages {
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 12px 16px;
@@ -877,6 +878,7 @@ dialog.viewer[open] { display: flex; align-items: center; justify-content: cente
 .emoji-tab[aria-selected="true"] { background: var(--surface-2); filter: none; opacity: 1; transform: scale(1.1); }
 .emoji-grid {
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: grid;
@@ -998,6 +1000,8 @@ dialog.viewer[open] { display: flex; align-items: center; justify-content: cente
   text-align: center;
 }
 .saved-cell.cutout img { object-fit: contain; border-radius: 0; }
+/* No painel, o recorte animado também fica menor dentro da célula, com folga para se mexer. */
+.saved-cell.cutout img.cut-anim { width: 70%; height: 70%; margin: 0 auto; }
 
 /* Animação dos recortes: escolhida na aba Salvas, vai junto na mensagem */
 .anim-row {
@@ -1038,6 +1042,17 @@ dialog.viewer[open] { display: flex; align-items: center; justify-content: cente
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .25));
 }
 .msg.sticker-img .msg-img:not([src]) { width: 120px; height: 120px; }
+
+/* Recorte animado: a imagem ocupa 70% de uma caixa fixa. Assim pular, pulsar e até girar
+   cabem dentro da caixa: não aparece barra de rolagem e a animação não é cortada. */
+.cut-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(180px, 50vw);
+  aspect-ratio: 1;
+}
+.msg.sticker-img .cut-box .msg-img { width: 70%; height: 70%; max-width: none; max-height: none; }
 .msg.sticker-img .msg-meta { padding: 1px 8px; }
 
 .msg.sticker { max-width: none; }
