@@ -1,5 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/+esm'
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js'
+import { SUPABASE_URL, SUPABASE_ANON_KEY, VAPID_PUBLIC_KEY } from './config.js'
 
 const $ = (id) => document.getElementById(id)
 const configured = !SUPABASE_URL.includes('SEU-PROJETO') && !SUPABASE_ANON_KEY.includes('SUA_ANON_KEY')
@@ -146,6 +146,7 @@ async function startApp() {
   await loadProfile()
   await loadConversations()
   subscribeRealtime()
+  syncPush()
   if (state.pendingOpen) {
     openById(state.pendingOpen)
     state.pendingOpen = null
@@ -199,7 +200,6 @@ async function onInsert(m) {
     addMessage(m)
     if (!mine && document.visibilityState === 'visible') await markRead()
   }
-  if (!mine && (!isOpen || document.visibilityState !== 'visible')) notify(m)
   scheduleListRefresh()
 }
 
@@ -511,6 +511,7 @@ $('profile-form').addEventListener('submit', async (e) => {
 
 $('logout-btn').addEventListener('click', async () => {
   $('profile-dialog').close()
+  await unsubscribePush()
   await supabase.auth.signOut()
 })
 
@@ -518,37 +519,90 @@ document.querySelectorAll('[data-close]').forEach((b) =>
   b.addEventListener('click', () => b.closest('dialog').close())
 )
 
-// ---------- Notificações (com o app aberto ou em segundo plano) ----------
+// ---------- Notificações push (chegam mesmo com o app fechado) ----------
+
+const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+
+function b64ToBytes(b64) {
+  const s = atob((b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/'))
+  return Uint8Array.from(s, (c) => c.charCodeAt(0))
+}
+
+async function savePush(sub) {
+  const { endpoint, keys } = sub.toJSON()
+  const { error } = await supabase.rpc('save_push_subscription', {
+    p_endpoint: endpoint,
+    p_p256dh: keys.p256dh,
+    p_auth: keys.auth,
+  })
+  if (error) throw error
+}
+
+async function subscribePush() {
+  const reg = await navigator.serviceWorker.ready
+  const sub =
+    (await reg.pushManager.getSubscription()) ||
+    (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID_PUBLIC_KEY) }))
+  await savePush(sub)
+}
+
+// Ao abrir o app, renova a inscrição (o navegador pode trocá-la com o tempo).
+async function syncPush() {
+  if (!pushSupported || Notification.permission !== 'granted') return
+  try {
+    await subscribePush()
+  } catch (err) {
+    console.error('push', err)
+  }
+}
+
+async function unsubscribePush() {
+  if (!pushSupported) return
+  try {
+    const reg = await navigator.serviceWorker.ready
+    const sub = await reg.pushManager.getSubscription()
+    if (!sub) return
+    await supabase.rpc('delete_push_subscription', { p_endpoint: sub.endpoint })
+    await sub.unsubscribe()
+  } catch (err) {
+    console.error('push', err)
+  }
+}
 
 function updateNotifyBtn() {
   const btn = $('notify-btn')
-  if (!('Notification' in window)) {
-    btn.hidden = true
-    return
+  btn.hidden = false
+  btn.disabled = false
+  if (!pushSupported) {
+    if (isIOS && !isStandalone) {
+      btn.textContent = 'No iPhone, instale o app na tela inicial para receber notificações'
+      btn.disabled = true
+    } else {
+      btn.hidden = true
+    }
+  } else if (Notification.permission === 'denied') {
+    btn.textContent = 'Notificações bloqueadas no navegador'
+    btn.disabled = true
+  } else if (Notification.permission === 'granted') {
+    btn.textContent = 'Notificações ativadas ✓'
+    btn.disabled = true
+  } else {
+    btn.textContent = 'Ativar notificações'
   }
-  btn.hidden = Notification.permission === 'granted'
-  btn.disabled = Notification.permission === 'denied'
-  if (Notification.permission === 'denied') btn.textContent = 'Notificações bloqueadas no navegador'
 }
 
 $('notify-btn').addEventListener('click', async () => {
-  await Notification.requestPermission()
+  const permission = await Notification.requestPermission()
+  if (permission === 'granted') {
+    try {
+      await subscribePush()
+      setMsg($('profile-msg'), 'Pronto! Você vai receber avisos de mensagens novas.')
+    } catch (err) {
+      setMsg($('profile-msg'), 'Não foi possível ativar: ' + err.message, true)
+    }
+  }
   updateNotifyBtn()
 })
-
-async function notify(m) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return
-  const reg = await navigator.serviceWorker?.getRegistration()
-  if (!reg) return
-  const conv = state.conversations.find((c) => c.conversation_id === m.conversation_id)
-  reg.showNotification(conv?.other_name || 'Nova mensagem', {
-    body: m.body,
-    tag: m.conversation_id,
-    icon: 'icons/icon-192.png',
-    badge: 'icons/icon-192.png',
-    data: { conversation_id: m.conversation_id },
-  })
-}
 
 navigator.serviceWorker?.addEventListener('message', (e) => {
   if (e.data?.open) openById(e.data.open)

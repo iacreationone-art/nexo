@@ -1,6 +1,6 @@
 // Service worker do Nexo: permite instalar o site como app e abrir a tela mesmo sem internet.
 // Ao mudar arquivos do app, aumente a versão para forçar a atualização do cache.
-const CACHE = 'nexo-v1'
+const CACHE = 'nexo-v2'
 const SHELL = [
   './',
   'index.html',
@@ -45,6 +45,31 @@ self.addEventListener('fetch', (e) => {
         return res
       })
       .catch(() => caches.match(e.request, { ignoreSearch: true }))
+  )
+})
+
+// Push vindo da Edge Function send-push (funciona com o app fechado).
+self.addEventListener('push', (e) => {
+  let data = {}
+  try {
+    data = e.data ? e.data.json() : {}
+  } catch {
+    data = { body: e.data?.text() }
+  }
+
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // Se o app está aberto e na frente, a mensagem já aparece na tela.
+      if (clients.some((c) => c.visibilityState === 'visible' && c.focused)) return
+      return self.registration.showNotification(data.title || 'Nexo', {
+        body: data.body || 'Nova mensagem',
+        tag: data.conversation_id,
+        renotify: true,
+        icon: 'icons/icon-192.png',
+        badge: 'icons/icon-192.png',
+        data: { conversation_id: data.conversation_id },
+      })
+    })
   )
 })
 

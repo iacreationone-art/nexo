@@ -13,7 +13,7 @@ Abra no navegador do celular e use **Adicionar à tela inicial**: o Nexo vira um
 - Mensagens chegando na hora, "online", "digitando…", ✓ enviada / ✓✓ lida
 - Contador de não lidas
 - Instalável (PWA), tema claro/escuro automático
-- Notificações enquanto o app está aberto ou em segundo plano
+- Notificações push, mesmo com o app fechado
 
 ## Configuração
 
@@ -45,6 +45,19 @@ Abra no navegador do celular e use **Adicionar à tela inicial**: o Nexo vira um
 Qualquer servidor estático serve, por exemplo a extensão *Live Server* do VS Code.
 Adicione `http://localhost:5500` (ou a porta usada) às *Redirect URLs* do Supabase.
 
+### 3. Notificações push (opcional)
+
+Avisam de mensagens novas mesmo com o app fechado. As chaves secretas ficam fora do repositório
+(arquivo `nexo-segredos.txt`) — nunca as coloque no GitHub.
+
+1. **SQL Editor:** rode `select vault.create_secret('SEU_PUSH_SECRET', 'push_secret');` e depois todo o
+   [`supabase/push.sql`](supabase/push.sql).
+2. **Edge Functions → Secrets:** adicione `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` e `PUSH_SECRET`.
+3. **Edge Functions → Deploy a new function → Via Editor:** nome `send-push`, cole
+   [`supabase/functions/send-push/index.ts`](supabase/functions/send-push/index.ts) e clique em *Deploy*.
+4. Nos detalhes da função, desligue **Verify JWT** (a função se protege com o `PUSH_SECRET`).
+5. No app: foto de perfil → **Ativar notificações**. No iPhone, só funciona com o app instalado na tela inicial (iOS 16.4+).
+
 ## Como instalar no celular
 
 - **Android (Chrome):** aparece o botão **Instalar** no topo da lista, ou menu ⋮ → *Instalar app*.
@@ -58,6 +71,5 @@ Ao publicar mudanças, aumente a versão em `sw.js` (`const CACHE = 'nexo-v2'`) 
 
 - Fotos, áudios e documentos (Supabase Storage)
 - Grupos
-- Notificação push com o app fechado (Web Push + Edge Function)
 - Foto de perfil
 - Canais privados do Realtime para "online" e "digitando…"
