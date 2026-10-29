@@ -175,6 +175,22 @@
           <button type="submit" class="send-btn" aria-label="Enviar">
             <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6l-.1 6.5L15 12 3.3 13.9z"/></svg>
           </button>
+          <!-- Com a caixa vazia, no lugar do enviar: gravar áudio -->
+          <button type="button" id="mic-btn" class="send-btn mic-btn" title="Gravar áudio" aria-label="Gravar áudio">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11z"/></svg>
+          </button>
+          <!-- Gravando: cancelar, tempo e enviar -->
+          <div class="rec-bar" role="status">
+            <button type="button" id="rec-cancel" class="attach-btn" title="Cancelar áudio" aria-label="Cancelar áudio">
+              <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4zm-3 6h12l-1 12H7zm4 2v8h1.5v-8zm2.5 0v8H14v-8z"/></svg>
+            </button>
+            <span class="rec-dot" aria-hidden="true"></span>
+            <span id="rec-time" class="rec-time">0:00</span>
+            <span class="rec-hint">Gravando…</span>
+            <button type="button" id="rec-send" class="send-btn" title="Enviar áudio" aria-label="Enviar áudio">
+              <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6l-.1 6.5L15 12 3.3 13.9z"/></svg>
+            </button>
+          </div>
         </form>
       </div>
     </section>

@@ -31,6 +31,7 @@ const keyCache = new Map()  // id da chave da conversa -> CryptoKey, ou null se 
 const sendKeys = new Map()  // id da conversa -> { keyId, key } usada para enviar
 let tmpSeq = 0
 let listTimer = null
+let rec = null // gravação de áudio em andamento
 let listLoaded = false // já veio a lista do servidor (a guardada não pode mais sobrescrever)
 
 const MSG_COLS = 'id, conversation_id, sender_id, body, ciphertext, key_id, created_at, read_at, deleted_at, attachment_path, attachment_name, attachment_type, attachment_size'
@@ -443,6 +444,7 @@ async function openMessage(m) {
     if (p.n) m.attachment_name = p.n
     m.sticker = !!p.f // imagem recortada: aparece sem balão, como figurinha
     m.stickerAnim = p.f ? validAnim(p.a) : '' // e pode vir com animação (pulando, girando…)
+    m.duration = p.d || 0 // áudio: duração em segundos
     m.locked = false
   } catch {
     m.locked = true
@@ -597,6 +599,11 @@ async function showSavedConversations() {
   renderConversations()
 }
 
+function attachmentLabel(type, name) {
+  type = type || ''
+  return type.startsWith('image/') ? '📷 Foto' : type.startsWith('audio/') ? '🎤 Áudio' : '📎 ' + name
+}
+
 // A última mensagem vem cifrada: abre aqui para mostrar na lista.
 async function openPreview(c) {
   if (!c.last_key || !c.last_body?.startsWith('e1:')) return
@@ -604,7 +611,7 @@ async function openPreview(c) {
     const key = await getKey(c.last_key)
     if (!key) throw new Error('sem chave')
     const p = await cripto.decryptMessage(key, c.conversation_id, c.last_body)
-    c.last_body = !p.n ? (stickerOf(p.t) ? '🎭 Figurinha' : p.t) : p.f ? '🎭 Figurinha' : (p.y || '').startsWith('image/') ? '📷 Foto' : '📎 ' + p.n
+    c.last_body = !p.n ? (stickerOf(p.t) ? '🎭 Figurinha' : p.t) : p.f ? '🎭 Figurinha' : attachmentLabel(p.y, p.n)
   } catch {
     c.last_body = '🔒 Mensagem protegida'
   }
@@ -805,6 +812,7 @@ async function openConversation(c) {
 }
 
 function closeConversation(resetView = true) {
+  stopRecording(true) // saiu no meio de uma gravação: joga fora e desliga o microfone
   if (state.typingChannel) supabase.removeChannel(state.typingChannel)
   state.typingChannel = null
   state.current = null
@@ -948,7 +956,8 @@ function messageNode(m) {
   const mine = m.sender_id === state.user.id
   const bubble = el('div', 'msg' + (mine ? ' me' : '') + (m.pending ? ' pending' : ''))
   bubble.dataset.id = m.id
-  const plain = !m.locked && !m.attachment_path && !m.localUrl
+  const hasFile = !!(m.attachment_path || m.localUrl || m.attachment_type) // (o provisório "Enviando…" só tem o tipo)
+  const plain = !m.locked && !hasFile
   const fig = plain && stickerOf(m.body)
   const emojis = plain && !fig && emojiOnly(m.body)
   if (m.deleted_at) {
@@ -956,7 +965,7 @@ function messageNode(m) {
     bubble.append(el('span', 'msg-deleted', mine ? '🚫 Você apagou esta mensagem' : '🚫 Mensagem apagada'))
   } else if (m.locked) {
     bubble.append(el('span', 'msg-locked', '🔒 Esta mensagem não pode ser aberta neste aparelho.'))
-  } else if (m.attachment_path || m.localUrl) {
+  } else if (hasFile) {
     bubble.append(renderAttachment(m, bubble))
     if (m.body) bubble.append(el('span', 'msg-text', m.body))
   } else if (fig) {
@@ -983,6 +992,7 @@ function renderMessages(forceBottom) {
   const box = $('messages')
   const nearBottom = isNearBottom(box)
   imageObserver.disconnect()
+  audioObserver.disconnect()
   const frag = document.createDocumentFragment()
   let lastDay = ''
   for (const m of state.msgs) {
@@ -1114,8 +1124,101 @@ function fileSize(bytes) {
 
 const FILE_ICON = '<svg viewBox="0 0 24 24" width="32" height="32"><path fill="currentColor" d="M6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V9h5.5zM8 13v2h8v-2zm0 4v2h5v-2z"/></svg>'
 
+// ---------- Áudio ----------
+
+const fmtDur = (s) => {
+  s = Math.max(0, Math.floor(s || 0))
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0')
+}
+const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M8 5.1v13.8a1 1 0 0 0 1.5.9l10.8-6.9a1 1 0 0 0 0-1.8L9.5 4.2A1 1 0 0 0 8 5.1z"/></svg>'
+const PAUSE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M7 5h3.5v14H7zm6.5 0H17v14h-3.5z"/></svg>'
+let playingAudio = null // só um áudio toca por vez
+
+// O áudio é baixado e aberto quando a mensagem chega perto da tela (como as fotos).
+const audioObserver = new IntersectionObserver((entries) => {
+  for (const { isIntersecting, target } of entries) {
+    if (!isIntersecting) continue
+    audioObserver.unobserve(target)
+    target.load()
+  }
+}, { root: $('messages'), rootMargin: '600px 0px' })
+
+function audioPlayer(m) {
+  const box = el('div', 'msg-audio')
+  const btn = el('button', 'audio-play')
+  btn.type = 'button'
+  btn.setAttribute('aria-label', 'Tocar áudio')
+  btn.innerHTML = PLAY_ICON
+  const bar = el('input', 'audio-bar')
+  Object.assign(bar, { type: 'range', min: 0, max: 1000, step: 1, value: 0 })
+  bar.setAttribute('aria-label', 'Posição do áudio')
+  const time = el('span', 'audio-time', fmtDur(m.duration))
+  box.append(btn, bar, time)
+  if (m.pending) {
+    btn.disabled = bar.disabled = true
+    return box
+  }
+
+  const audio = el('audio')
+  audio.preload = 'metadata'
+  // O áudio gravado no navegador às vezes não informa a duração: usa a que veio na mensagem.
+  const total = () => (Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : m.duration || 0)
+  let loading = null
+  box.load = () => {
+    loading ||= (async () => {
+      audio.src = m.localUrl || (await fileUrl(m))
+    })()
+    loading.catch(() => (loading = null))
+    return loading
+  }
+  audio.addEventListener('timeupdate', () => {
+    const t = total()
+    bar.value = t ? Math.min(1000, (audio.currentTime / t) * 1000) : 0
+    time.textContent = fmtDur(audio.currentTime)
+  })
+  audio.addEventListener('play', () => {
+    btn.innerHTML = PAUSE_ICON
+    btn.setAttribute('aria-label', 'Pausar áudio')
+  })
+  audio.addEventListener('pause', () => {
+    btn.innerHTML = PLAY_ICON
+    btn.setAttribute('aria-label', 'Tocar áudio')
+  })
+  audio.addEventListener('ended', () => {
+    bar.value = 0
+    time.textContent = fmtDur(total())
+  })
+
+  btn.addEventListener('click', async () => {
+    if (!audio.paused) return audio.pause()
+    btn.classList.add('loading')
+    try {
+      await box.load()
+      if (playingAudio && playingAudio !== audio) playingAudio.pause()
+      playingAudio = audio
+      await audio.play()
+    } catch (err) {
+      // iPhone: se o áudio ainda estava baixando, ele pede um toque novo para tocar.
+      toast(err?.name === 'NotAllowedError' ? 'Toque de novo para ouvir.' : 'Não foi possível tocar o áudio.')
+    }
+    btn.classList.remove('loading')
+  })
+  bar.addEventListener('input', async () => {
+    try {
+      await box.load()
+      if (total()) audio.currentTime = (bar.value / 1000) * total()
+    } catch {}
+  })
+
+  box.append(audio)
+  if (m.localUrl) box.load()
+  else audioObserver.observe(box)
+  return box
+}
+
 function renderAttachment(m, bubble) {
   const isImage = (m.attachment_type || '').startsWith('image/')
+  if ((m.attachment_type || '').startsWith('audio/')) return audioPlayer(m)
 
   if (isImage) {
     bubble.classList.add('has-image')
@@ -1490,7 +1593,8 @@ async function shrinkImage(file, max = 1600) {
 }
 
 // sticker: imagem recortada que vai como figurinha (sem balão); anim: como ela se mexe.
-async function sendAttachment(original, { sticker = false, anim = '' } = {}) {
+// duration: áudio gravado (segundos), vai junto para mostrar o tempo antes de tocar.
+async function sendAttachment(original, { sticker = false, anim = '', duration = 0 } = {}) {
   const stickerAnim = sticker ? validAnim(anim) : ''
   const conv = state.current
   if (!conv) return
@@ -1511,6 +1615,7 @@ async function sendAttachment(original, { sticker = false, anim = '' } = {}) {
     localUrl: type.startsWith('image/') ? URL.createObjectURL(file) : null,
     sticker,
     stickerAnim,
+    duration,
     pending: true,
   }
   addMessage(tmp, true)
@@ -1535,6 +1640,7 @@ async function sendAttachment(original, { sticker = false, anim = '' } = {}) {
           y: type,
           ...(sticker && { f: 1 }),
           ...(stickerAnim && { a: stickerAnim }),
+          ...(duration && { d: duration }),
         }),
         attachment_path: path,
         attachment_type: type,
@@ -1559,6 +1665,7 @@ async function sendAttachment(original, { sticker = false, anim = '' } = {}) {
   data.attachment_name = original.name
   data.sticker = sticker
   data.stickerAnim = stickerAnim
+  data.duration = duration
   addMessage(data)
   scheduleListRefresh()
 }
@@ -1641,7 +1748,71 @@ async function pasteFromClipboard() {
 function autosize() {
   input.style.height = 'auto'
   input.style.height = Math.min(input.scrollHeight, 140) + 'px'
+  $('send-form').classList.toggle('has-text', !!input.value.trim()) // com texto: enviar; vazia: microfone
 }
+
+// ---------- Gravar áudio ----------
+// Toca no microfone: grava. 🗑️ cancela, ➤ envia. Até 5 minutos.
+// Prefere M4A (toca em todos os celulares); se o navegador não gravar M4A, usa WebM.
+
+const AUDIO_TYPES = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
+const MAX_REC = 5 * 60
+
+if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) $('send-form').classList.add('no-mic')
+
+const recSeconds = () => (rec ? (Date.now() - rec.start) / 1000 : 0)
+
+async function startRecording() {
+  if (rec || !state.current) return
+  let stream
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  } catch {
+    return toast('O Nexo não tem permissão para usar o microfone. Libere nas configurações do navegador.')
+  }
+  const mimeType = AUDIO_TYPES.find((t) => MediaRecorder.isTypeSupported(t))
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+  const r = { recorder, stream, chunks: [], start: Date.now(), conv: state.current, cancelled: false, duration: 0 }
+  rec = r
+  recorder.addEventListener('dataavailable', (e) => e.data.size && r.chunks.push(e.data))
+  recorder.addEventListener('stop', () => finishRecording(r))
+  recorder.start(1000)
+  emojiPicker.close()
+  input.blur()
+  $('send-form').classList.add('recording')
+  $('rec-time').textContent = '0:00'
+  r.timer = setInterval(() => {
+    $('rec-time').textContent = fmtDur(recSeconds())
+    if (recSeconds() >= MAX_REC) stopRecording(false)
+  }, 250)
+}
+
+// cancel: true joga fora; false envia.
+function stopRecording(cancel) {
+  if (!rec) return
+  const r = rec
+  rec = null
+  r.cancelled = cancel
+  r.duration = Math.round((Date.now() - r.start) / 1000)
+  clearInterval(r.timer)
+  if (r.recorder.state !== 'inactive') r.recorder.stop()
+  r.stream.getTracks().forEach((t) => t.stop()) // apaga a luz do microfone
+  $('send-form').classList.remove('recording')
+}
+
+function finishRecording(r) {
+  if (r.cancelled) return
+  if (r.duration < 1 || !r.chunks.length) return toast('Áudio muito curto. Segure um pouco mais.')
+  if (state.current !== r.conv) return
+  const type = (r.recorder.mimeType || r.chunks[0].type || 'audio/webm').split(';')[0]
+  const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm'
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  sendAttachment(new File(r.chunks, `audio-${stamp}.${ext}`, { type }), { duration: r.duration })
+}
+
+$('mic-btn').addEventListener('click', startRecording)
+$('rec-cancel').addEventListener('click', () => stopRecording(true))
+$('rec-send').addEventListener('click', () => stopRecording(false))
 
 input.addEventListener('input', () => {
   autosize()

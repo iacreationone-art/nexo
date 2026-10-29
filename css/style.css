@@ -618,6 +618,39 @@ body.in-chat .chat { display: flex; }
   flex: none;
 }
 
+/* Caixa vazia: microfone no lugar do enviar (sem gravação no navegador, fica só o enviar) */
+.composer:not(.has-text):not(.no-mic) > button[type="submit"],
+.composer.has-text .mic-btn,
+.composer.no-mic .mic-btn { display: none; }
+
+/* Gravando áudio: a caixa vira a barra de gravação */
+.rec-bar { display: none; }
+.composer.recording > :not(.rec-bar) { display: none; }
+.composer.recording .rec-bar { display: flex; flex: 1; align-items: center; gap: 10px; min-height: 44px; }
+.rec-bar .attach-btn { border: 0; background: none; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); animation: rec-blink 1s ease-in-out infinite; }
+@keyframes rec-blink { 50% { opacity: .2; } }
+.rec-time { font-variant-numeric: tabular-nums; font-weight: 600; }
+.rec-hint { flex: 1; color: var(--muted); font-size: .9rem; }
+
+/* Mensagem de áudio */
+.msg-audio { display: flex; align-items: center; gap: 8px; width: 240px; max-width: 100%; padding: 2px 0; }
+.audio-play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.audio-play.loading { opacity: .6; }
+.audio-play:disabled { opacity: .5; }
+.audio-bar { flex: 1; min-width: 0; accent-color: var(--primary); }
+.audio-time { flex: none; font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.6em; text-align: right; }
+
 /* ---------- Diálogos ---------- */
 
 dialog {
