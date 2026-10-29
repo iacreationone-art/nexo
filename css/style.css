@@ -343,19 +343,19 @@ body.in-chat .chat { display: flex; }
   position: absolute;
   right: 20px;
   bottom: calc(20px + env(safe-area-inset-bottom));
-  width: 58px;
-  height: 58px;
+  width: 60px;
+  height: 60px;
   border: 0;
-  border-radius: 18px;
+  border-radius: 50%;
   background: var(--primary);
   color: var(--primary-ink);
   display: grid;
   place-items: center;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .22);
+  box-shadow: 0 6px 18px rgba(79, 70, 229, .45);
   transition: transform .15s ease, box-shadow .15s ease;
   z-index: 5;
 }
-.fab:hover { box-shadow: 0 8px 24px rgba(0, 0, 0, .28); }
+.fab:hover { box-shadow: 0 8px 24px rgba(79, 70, 229, .55); }
 .fab:active { transform: scale(.93); }
 .fab:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
 
