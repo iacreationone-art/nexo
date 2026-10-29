@@ -1321,6 +1321,26 @@ $('install-close').addEventListener('click', () => {
   try { localStorage.setItem('nexo-install-dismissed', '1') } catch {}
 })
 
+// ---------- Tamanho da tela (teclado do celular) ----------
+
+// Mantém o app do tamanho da área visível: com o teclado aberto, o topo e a caixa
+// de mensagem continuam na tela (principalmente no iPhone, que não encolhe a página).
+function fitViewport() {
+  const vv = window.visualViewport
+  if (!vv) return
+  const root = document.documentElement.style
+  root.setProperty('--app-h', vv.height + 'px')
+  root.setProperty('--app-top', vv.offsetTop + 'px')
+  if (!$('app').hidden && window.scrollY) window.scrollTo(0, 0)
+  // Teclado abriu enquanto digita: as últimas mensagens continuam à vista.
+  if (document.activeElement === $('msg-input')) $('messages').scrollTop = $('messages').scrollHeight
+}
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', fitViewport)
+  visualViewport.addEventListener('scroll', fitViewport)
+  fitViewport()
+}
+
 // ---------- Início ----------
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js')

@@ -61,6 +61,8 @@ html, body {
   color: var(--text);
   font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  /* Sem efeito elástico nem "puxar para atualizar": a tela não estica ao puxar. */
+  overscroll-behavior: none;
 }
 
 [hidden] { display: none !important; }
@@ -177,8 +179,15 @@ input:focus, textarea:focus { border-color: var(--primary); }
 
 /* ---------- Layout do app ---------- */
 
+/* O app ocupa exatamente a área visível, mesmo com o teclado aberto
+   (--app-h e --app-top são atualizados pelo app.js com o visualViewport). */
+body:has(.app:not([hidden])) { overflow: hidden; }
 .app {
-  height: 100dvh;
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--app-top, 0px);
+  height: var(--app-h, 100dvh);
   display: grid;
   grid-template-columns: 1fr;
   overflow: hidden;
@@ -326,6 +335,7 @@ body.in-chat .chat { display: flex; }
   margin: 0;
   padding: 6px 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   flex: 1;
 }
 .conv-item {
@@ -473,6 +483,7 @@ body.in-chat .chat { display: flex; }
 .messages {
   flex: 1;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 16px;
   background: var(--chat-bg);
   display: flex;
@@ -609,9 +620,12 @@ input:disabled { color: var(--muted); background: var(--surface-2); }
   dialog.sheet {
     width: 100%;
     max-width: none;
-    height: 100%;
+    top: var(--app-top, 0px);
+    bottom: auto;
+    height: var(--app-h, 100%);
     max-height: none;
     margin: 0;
+    overscroll-behavior: contain;
     border-radius: 0;
     padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
   }
@@ -652,7 +666,7 @@ dialog.picker[open] { display: flex; flex-direction: column; }
 .picker-title { display: flex; flex-direction: column; }
 .picker-title small { font-size: .8rem; }
 .picker-search { margin: 0; }
-.picker-scroll { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
+.picker-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -8px; padding: 0 8px; }
 
 .picker-actions { display: grid; margin-bottom: 4px; }
 .picker-action {
