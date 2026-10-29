@@ -1217,6 +1217,47 @@ async function saveMessageImage(m) {
 
 $('viewer-save').addEventListener('click', () => viewerMsg && saveMessageImage(viewerMsg))
 
+// 📥 Salvar na galeria do celular.
+// iPhone: site não grava direto no app Fotos; o menu de compartilhar tem "Salvar Imagem".
+// Android e computador: baixa o arquivo (no Android ele aparece na galeria, pasta Download).
+// (iPad novo se apresenta como Mac: por isso o teste do toque)
+const isApplePhone = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+
+async function saveToGallery(m) {
+  let file
+  try {
+    file = await messageFile(m)
+  } catch {
+    return toast('Não foi possível pegar a foto.')
+  }
+  if (isApplePhone && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] })
+    } catch (err) {
+      if (err.name === 'AbortError') return // a pessoa fechou o menu
+      // Demorou para preparar a foto e o iPhone exige um toque novo para abrir o menu.
+      toast('A foto está pronta.', { label: 'Salvar', run: () => navigator.share({ files: [file] }).catch(() => {}) })
+    }
+    return
+  }
+  const url = URL.createObjectURL(file)
+  const a = el('a')
+  a.href = url
+  a.download = file.name
+  document.body.append(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
+  toast('📥 Foto salva. Na galeria, ela fica na pasta Download.')
+}
+
+// O botão de baixar da foto aberta também passa a salvar na galeria.
+$('viewer-download').addEventListener('click', (e) => {
+  if (!viewerMsg) return
+  e.preventDefault()
+  saveToGallery(viewerMsg)
+})
+
 // Encaminhar: escolhe a conversa, abre ela e manda a mesma foto lá.
 $('viewer-forward').addEventListener('click', () => {
   const m = viewerMsg
@@ -1265,6 +1306,7 @@ function openMsgMenu(bubble) {
   const mine = m.sender_id === state.user.id
   $('msg-copy').hidden = !(m.body && !m.deleted_at && !m.locked && !stickerOf(m.body))
   $('msg-save').hidden = !(m.attachment_path && (m.attachment_type || '').startsWith('image/') && !m.locked)
+  $('msg-gallery').hidden = $('msg-save').hidden
   $('msg-delete-all').hidden = !mine || !!m.deleted_at
   // Fecha o teclado e o painel de emojis: senão eles cobrem as opções de baixo do menu.
   document.activeElement?.blur()
@@ -1320,6 +1362,11 @@ $('msg-menu').addEventListener('click', (e) => {
 $('msg-save').addEventListener('click', () => {
   $('msg-menu').close()
   saveMessageImage(menuMsg)
+})
+
+$('msg-gallery').addEventListener('click', () => {
+  $('msg-menu').close()
+  saveToGallery(menuMsg)
 })
 
 $('msg-copy').addEventListener('click', async () => {
