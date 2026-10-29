@@ -951,7 +951,24 @@ dialog.viewer[open] { display: flex; align-items: center; justify-content: cente
   line-height: 22px;
   text-align: center;
 }
+.saved-cell.cutout img { object-fit: contain; border-radius: 0; }
 .stickers .emoji-empty { margin-top: 12px; padding: 0 12px; }
+
+/* Recorte enviado como figurinha: sem balão e sem cortar as bordas */
+.msg.sticker-img { padding: 0 2px; }
+.msg.sticker-img .msg-img {
+  width: auto;
+  height: auto;
+  max-width: min(180px, 50vw);
+  max-height: 180px;
+  aspect-ratio: auto;
+  object-fit: contain;
+  border-radius: 0;
+  background: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .25));
+}
+.msg.sticker-img .msg-img:not([src]) { width: 120px; height: 120px; }
+.msg.sticker-img .msg-meta { padding: 1px 8px; }
 
 .msg.sticker { max-width: none; }
 .sticker-art { width: 136px; height: 136px; }

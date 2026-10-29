@@ -112,7 +112,7 @@ function saveRecent(emoji) {
 const SAVED = { icon: '⭐', name: 'Salvas', saved: true, list: [] }
 CATEGORIES.push(SAVED)
 
-// saved: { load() → [{ id, blob, name }], pick(id), remove(id), add() }
+// saved: { load() → [{ id, blob, name, cutout }], pick(id), remove(id), add(), paste() }
 export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
   CATEGORIES[0].list = loadRecent()
   let savedUrls = []
@@ -133,10 +133,16 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
     add.dataset.add = '1'
     add.title = 'Adicionar imagem do celular'
     add.innerHTML = '<span aria-hidden="true">+</span><small>Adicionar</small>'
+    const paste = document.createElement('button')
+    paste.type = 'button'
+    paste.className = 'emoji-cell saved-cell saved-add'
+    paste.dataset.paste = '1'
+    paste.title = 'Colar um recorte copiado'
+    paste.innerHTML = '<span aria-hidden="true">📋</span><small>Colar</small>'
     const cells = items.map((item) => {
       const b = document.createElement('button')
       b.type = 'button'
-      b.className = 'emoji-cell saved-cell'
+      b.className = 'emoji-cell saved-cell' + (item.cutout ? ' cutout' : '')
       b.dataset.saved = item.id
       b.title = 'Enviar ' + item.name
       const img = document.createElement('img')
@@ -152,11 +158,11 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       b.append(img, del)
       return b
     })
-    grid.replaceChildren(add, ...cells)
+    grid.replaceChildren(add, paste, ...cells)
     if (!items.length) {
       const p = document.createElement('p')
       p.className = 'emoji-empty'
-      p.textContent = 'Abra uma foto da conversa e toque na ⭐ para guardá-la aqui, ou toque em + para escolher do celular.'
+      p.textContent = 'Copie um recorte de foto e toque em Colar (ou cole na caixa de mensagem). Também dá para tocar na ⭐ de uma foto da conversa, ou em + para escolher do celular.'
       grid.append(p)
     }
   }
@@ -220,6 +226,7 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       return
     }
     if (cell.dataset.add) return saved.add()
+    if (cell.dataset.paste) return saved.paste()
     if (cell.dataset.saved) {
       cell.classList.remove('pop')
       void cell.offsetWidth // reinicia a animação
@@ -264,5 +271,10 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
     close: () => toggle(false),
     // Atualiza a aba "Salvas" se ela estiver aberta.
     refreshSaved: () => !panel.hidden && CATEGORIES[current] === SAVED && showSaved(),
+    // Abre o painel já na aba "Salvas" (depois de colar ou salvar uma imagem).
+    openSaved: () => {
+      current = CATEGORIES.indexOf(SAVED)
+      toggle(true)
+    },
   }
 }

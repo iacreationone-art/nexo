@@ -441,6 +441,7 @@ async function openMessage(m) {
     const p = await cripto.decryptMessage(key, m.conversation_id, m.ciphertext)
     m.body = p.t ?? null
     if (p.n) m.attachment_name = p.n
+    m.sticker = !!p.f // imagem recortada: aparece sem balão, como figurinha
     m.locked = false
   } catch {
     m.locked = true
@@ -600,7 +601,7 @@ async function openPreview(c) {
     const key = await getKey(c.last_key)
     if (!key) throw new Error('sem chave')
     const p = await cripto.decryptMessage(key, c.conversation_id, c.last_body)
-    c.last_body = !p.n ? (stickerOf(p.t) ? '🎭 Figurinha' : p.t) : (p.y || '').startsWith('image/') ? '📷 Foto' : '📎 ' + p.n
+    c.last_body = !p.n ? (stickerOf(p.t) ? '🎭 Figurinha' : p.t) : p.f ? '🎭 Figurinha' : (p.y || '').startsWith('image/') ? '📷 Foto' : '📎 ' + p.n
   } catch {
     c.last_body = '🔒 Mensagem protegida'
   }
@@ -1085,6 +1086,7 @@ function renderAttachment(m, bubble) {
 
   if (isImage) {
     bubble.classList.add('has-image')
+    if (m.sticker) bubble.classList.add('emoji-only', 'sticker-img')
     const img = el('img', 'msg-img')
     img.alt = m.attachment_name || 'Foto'
     img.draggable = false
@@ -1166,7 +1168,7 @@ $('viewer-save').addEventListener('click', async () => {
   if (!viewerMsg) return
   try {
     const file = await messageFile(viewerMsg)
-    const added = await addSaved(state.user.id, file, file.name)
+    const added = await addSaved(state.user.id, file, file.name, { cutout: await isCutout(file) })
     toast(added ? '⭐ Salva! Ela fica na aba ⭐ do painel de emojis.' : 'Essa imagem já está nas salvas.')
     emojiPicker.refreshSaved()
   } catch (err) {
@@ -1208,10 +1210,40 @@ async function forwardTo(m, c, row) {
   $('forward-dialog').close()
   $('viewer').close()
   await openConversation(c)
-  if (state.current === c) await sendAttachment(file)
+  if (state.current === c) await sendAttachment(file, { sticker: !!m.sticker })
+}
+
+// Tem partes transparentes? (recorte de foto, figurinha). Olha um pixel a cada 4.
+function hasClearPixels(canvas) {
+  const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height)
+  for (let i = 3; i < data.length; i += 16) if (data[i] < 250) return true
+  return false
+}
+
+// Imagem recortada (fundo transparente)? Confere numa cópia pequena.
+function isCutout(blob) {
+  return new Promise((resolve) => {
+    if (!/^image\/(png|webp)$/.test(blob.type)) return resolve(false)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(img.src)
+      const scale = Math.min(1, 256 / Math.max(img.naturalWidth, img.naturalHeight))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale))
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale))
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(hasClearPixels(canvas))
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src)
+      resolve(false)
+    }
+    img.src = URL.createObjectURL(blob)
+  })
 }
 
 // Fotos grandes viram JPEG de até 1600px (economiza internet e espaço). GIFs vão como estão.
+// Recortes (com fundo transparente) continuam PNG, para o recorte não ganhar fundo.
 function shrinkImage(file, max = 1600) {
   return new Promise((resolve) => {
     if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type)) return resolve(file)
@@ -1223,11 +1255,13 @@ function shrinkImage(file, max = 1600) {
       canvas.width = Math.round(img.naturalWidth * scale)
       canvas.height = Math.round(img.naturalHeight * scale)
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      const clear = /^image\/(png|webp)$/.test(file.type) && hasClearPixels(canvas)
+      const [type, ext] = clear ? ['image/png', '.png'] : ['image/jpeg', '.jpg']
       canvas.toBlob((blob) => {
         if (!blob || blob.size >= file.size) return resolve(file)
-        const name = file.name.replace(/\.[^.]+$/, '') + '.jpg'
-        resolve(new File([blob], name, { type: 'image/jpeg' }))
-      }, 'image/jpeg', 0.82)
+        const name = file.name.replace(/\.[^.]+$/, '') + ext
+        resolve(new File([blob], name, { type }))
+      }, type, 0.82)
     }
     img.onerror = () => {
       URL.revokeObjectURL(img.src)
@@ -1237,7 +1271,8 @@ function shrinkImage(file, max = 1600) {
   })
 }
 
-async function sendAttachment(original) {
+// sticker: imagem recortada que vai como figurinha (sem balão).
+async function sendAttachment(original, { sticker = false } = {}) {
   const conv = state.current
   if (!conv) return
   const file = await shrinkImage(original)
@@ -1255,6 +1290,7 @@ async function sendAttachment(original) {
     attachment_type: type,
     attachment_size: file.size,
     localUrl: type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    sticker,
     pending: true,
   }
   addMessage(tmp, true)
@@ -1274,7 +1310,7 @@ async function sendAttachment(original) {
       .insert({
         conversation_id: conv.conversation_id,
         key_id: keyId,
-        ciphertext: await cripto.encryptMessage(key, conv.conversation_id, { n: original.name, y: type }),
+        ciphertext: await cripto.encryptMessage(key, conv.conversation_id, { n: original.name, y: type, ...(sticker && { f: 1 }) }),
         attachment_path: path,
         attachment_type: type,
         attachment_size: file.size,
@@ -1296,6 +1332,7 @@ async function sendAttachment(original) {
   urlCache.set('blob:' + path, { url: tmp.localUrl || URL.createObjectURL(file), blob: true, expires: Infinity })
   data.localUrl = tmp.localUrl
   data.attachment_name = original.name
+  data.sticker = sticker
   addMessage(data)
   scheduleListRefresh()
 }
@@ -1318,29 +1355,61 @@ const emojiPicker = setupEmojiPicker({
     load: () => listSaved(state.user.id),
     remove: removeSaved,
     add: () => $('saved-input').click(),
+    paste: pasteFromClipboard,
     pick: async (id) => {
       const item = await getSaved(id).catch(() => null)
-      if (item) sendAttachment(new File([item.blob], item.name, { type: item.type }))
+      if (item) sendAttachment(new File([item.blob], item.name, { type: item.type }), { sticker: !!item.cutout })
     },
   },
 })
 
-// "+" na aba Salvas: guarda imagens do celular (sem enviar).
-$('saved-input').addEventListener('change', async (e) => {
-  const files = [...e.target.files]
-  e.target.value = ''
+// Guarda imagens nas salvas (sem enviar). Recortes continuam com o fundo transparente.
+async function saveImages(files) {
   let n = 0
-  for (const f of files) {
+  for (const original of files) {
     try {
-      if (await addSaved(state.user.id, f, f.name)) n++
+      const file = await shrinkImage(original)
+      if (await addSaved(state.user.id, file, file.name, { cutout: await isCutout(file) })) n++
     } catch (err) {
-      toast(`"${f.name}": ${err.message}`)
-      break
+      toast(`"${original.name}": ${err.message}`)
+      return
     }
   }
-  if (n) toast(n === 1 ? '⭐ Imagem salva.' : `⭐ ${n} imagens salvas.`)
-  emojiPicker.refreshSaved()
+  toast(n === 0 ? 'Essa imagem já está nas salvas.' : n === 1 ? '⭐ Salva! Toque nela para enviar.' : `⭐ ${n} imagens salvas.`)
+  emojiPicker.openSaved()
+}
+
+const imagesOf = (files) => [...(files || [])].filter((f) => f.type.startsWith('image/'))
+
+// "+" na aba Salvas: escolhe imagens do celular.
+$('saved-input').addEventListener('change', (e) => {
+  const files = imagesOf(e.target.files)
+  e.target.value = ''
+  if (files.length) saveImages(files)
 })
+
+// Colar um recorte na caixa de mensagem: vai para as salvas, pronto para enviar.
+input.addEventListener('paste', (e) => {
+  const files = imagesOf(e.clipboardData?.files)
+  if (!files.length) return
+  e.preventDefault()
+  saveImages(files.map((f, i) => (f.name && f.name !== 'image.png' ? f : new File([f], `recorte-${Date.now()}-${i}.png`, { type: f.type }))))
+})
+
+// Botão "Colar" na aba Salvas.
+async function pasteFromClipboard() {
+  try {
+    const files = []
+    for (const item of await navigator.clipboard.read()) {
+      const type = item.types.find((t) => t.startsWith('image/'))
+      if (type) files.push(new File([await item.getType(type)], `recorte-${Date.now()}.png`, { type }))
+    }
+    if (!files.length) return toast('Não tem imagem copiada. Copie o recorte primeiro e depois toque em Colar.')
+    saveImages(files)
+  } catch {
+    toast('O celular não deixou colar por aqui. Toque e segure na caixa de mensagem e escolha "Colar".')
+  }
+}
 
 function autosize() {
   input.style.height = 'auto'

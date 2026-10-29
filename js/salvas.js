@@ -33,13 +33,14 @@ export async function listSaved(owner) {
   return all.sort((a, b) => b.at - a.at)
 }
 
-export async function addSaved(owner, blob, name) {
+// extra.cutout: imagem recortada (fundo transparente), que vai como figurinha.
+export async function addSaved(owner, blob, name, extra = {}) {
   if (blob.size > MAX_SAVED_SIZE) throw new Error('imagem grande demais (máximo 8 MB)')
   const list = await listSaved(owner)
   if (list.length >= MAX_SAVED) throw new Error(`você já tem ${MAX_SAVED} imagens salvas; apague alguma antes`)
   // A mesma imagem não entra duas vezes.
   if (list.some((x) => x.size === blob.size && x.name === name)) return false
-  const item = { id: crypto.randomUUID(), owner, blob, name: name || 'imagem', type: blob.type, size: blob.size, at: Date.now() }
+  const item = { id: crypto.randomUUID(), owner, blob, name: name || 'imagem', type: blob.type, size: blob.size, at: Date.now(), cutout: !!extra.cutout }
   await run('readwrite', (s) => s.put(item))
   return true
 }
