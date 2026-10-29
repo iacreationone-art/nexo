@@ -1,6 +1,6 @@
 // Service worker do Nexo: permite instalar o site como app e abrir a tela mesmo sem internet.
 // Ao mudar arquivos do app, aumente a versão: o celular baixa tudo de novo de uma vez.
-const CACHE = 'nexo-v25'
+const CACHE = 'nexo-v26'
 const SHELL = [
   './',
   'index.html',
@@ -20,8 +20,13 @@ const SHELL = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/dist/umd/supabase.js',
 ]
 
+// O GitHub Pages deixa o navegador reaproveitar cada arquivo por 10 minutos. Por isso tudo é
+// pedido com "no-cache": o navegador confere com o servidor (rápido quando nada mudou) e a
+// versão nova nunca é montada com arquivos velhos.
+const fresh = (url) => new Request(url, { cache: 'no-cache' })
+
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)))
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map(fresh))))
   self.skipWaiting()
 })
 
@@ -47,12 +52,12 @@ self.addEventListener('fetch', (e) => {
     caches.open(CACHE).then(async (cache) => {
       const hit = await cache.match(e.request, { ignoreSearch: true })
       if (hit && cdn) return hit
-      const fresh = fetch(e.request).then((res) => {
+      const update = fetch(cdn ? e.request : fresh(url.href)).then((res) => {
         if (res.ok) cache.put(url.origin + url.pathname, res.clone())
         return res
       })
-      if (!hit) return fresh.catch(() => Response.error())
-      e.waitUntil(fresh.catch(() => {}))
+      if (!hit) return update.catch(() => Response.error())
+      e.waitUntil(update.catch(() => {}))
       return hit
     })
   )
