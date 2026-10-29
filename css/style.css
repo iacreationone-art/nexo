@@ -642,6 +642,79 @@ label.check input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: va
 .btn-outline { background: none; color: var(--primary); box-shadow: inset 0 0 0 2px var(--primary); }
 a.btn { display: inline-block; text-align: center; text-decoration: none; }
 
+/* ---------- Nova conversa ---------- */
+
+@media (min-width: 768px) {
+  dialog.picker { height: min(680px, 90dvh); }
+}
+dialog.picker[open] { display: flex; flex-direction: column; }
+.picker-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.picker-title { display: flex; flex-direction: column; }
+.picker-title small { font-size: .8rem; }
+.picker-search { margin: 0; }
+.picker-scroll { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
+
+.picker-actions { display: grid; margin-bottom: 4px; }
+.picker-action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  text-align: left;
+  font-weight: 600;
+}
+.picker-action:hover { background: var(--surface-2); }
+.picker-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--primary);
+  color: var(--primary-ink);
+  flex: none;
+}
+
+.picker-section h4 {
+  margin: 14px 6px 4px;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.picker-list { list-style: none; margin: 0; padding: 0; }
+.picker-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  text-align: left;
+}
+.picker-item:hover { background: var(--surface-2); }
+.picker-item .avatar { width: 44px; height: 44px; }
+.picker-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.picker-item-main strong, .picker-item-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-item-main small { color: var(--muted); font-size: .85rem; }
+.picker-item .btn { flex: none; }
+.picker-hint { margin: 10px 6px; font-size: .9rem; }
+
+.picker-notfound {
+  margin: 10px 0;
+  padding: 16px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  text-align: center;
+}
+.picker-notfound p { margin: 6px 0 0; font-size: .9rem; }
+
 /* ---------- Dados do contato ---------- */
 
 .sheet-body { display: grid; gap: 12px; }

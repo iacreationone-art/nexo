@@ -153,17 +153,58 @@
   </main>
 
   <!-- Nova conversa -->
-  <dialog id="new-chat-dialog">
-    <form id="new-chat-form" method="dialog">
-      <h3>Nova conversa</h3>
-      <p class="muted">Digite o e-mail ou o telefone de quem já usa o Nexo.</p>
-      <input id="new-chat-email" placeholder="contato@email.com ou (11) 91234-5678" autocomplete="off" required>
-      <p id="new-chat-msg" class="form-msg" role="status"></p>
-      <div class="dialog-actions">
-        <button type="button" class="btn-link" data-close>Cancelar</button>
-        <button type="submit" class="btn">Conversar</button>
+  <dialog id="new-chat-dialog" class="sheet picker">
+    <div class="picker-body">
+      <header class="sheet-head">
+        <button type="button" class="icon-btn" data-close aria-label="Voltar">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M15.7 5.3a1 1 0 0 1 0 1.4L10.4 12l5.3 5.3a1 1 0 0 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z"/></svg>
+        </button>
+        <div class="picker-title">
+          <h3>Nova conversa</h3>
+          <small id="picker-count" class="muted"></small>
+        </div>
+      </header>
+
+      <div class="search picker-search">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M10 3a7 7 0 0 1 5.6 11.2l4.6 4.6-1.4 1.4-4.6-4.6A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></svg>
+        <input id="picker-input" type="search" placeholder="Nome, e-mail ou telefone" autocomplete="off" aria-label="Nome, e-mail ou telefone">
       </div>
-    </form>
+
+      <div class="picker-scroll">
+        <div class="picker-actions">
+          <button type="button" id="pick-contact" class="picker-action" hidden>
+            <span class="picker-icon"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-6 4a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm6 12H6v-1c0-2 4-3.1 6-3.1s6 1.1 6 3.1z"/></svg></span>
+            <span>Escolher da agenda do celular</span>
+          </button>
+          <button type="button" id="invite-btn" class="picker-action">
+            <span class="picker-icon"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M15 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2zm9 4c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z"/></svg></span>
+            <span>Convidar para o Nexo</span>
+          </button>
+        </div>
+
+        <p id="picker-hint" class="picker-hint muted" hidden></p>
+
+        <section id="picker-found-section" class="picker-section" hidden>
+          <h4>Encontrado no Nexo</h4>
+          <ul id="picker-found" class="picker-list"></ul>
+        </section>
+
+        <div id="picker-notfound" class="picker-notfound" hidden>
+          <strong id="picker-notfound-title"></strong>
+          <p class="muted">Convide a pessoa: depois que ela entrar uma vez, vocês já podem conversar.</p>
+          <div class="contact-actions">
+            <a id="invite-direct" class="btn" href="#" target="_blank" rel="noopener">Convidar</a>
+            <button type="button" id="invite-share" class="btn btn-outline">Outro jeito</button>
+          </div>
+        </div>
+
+        <section id="picker-contacts-section" class="picker-section">
+          <h4>Seus contatos</h4>
+          <ul id="picker-contacts" class="picker-list"></ul>
+          <p id="picker-contacts-empty" class="picker-hint muted" hidden></p>
+        </section>
+      </div>
+    </div>
   </dialog>
 
   <!-- Perfil -->

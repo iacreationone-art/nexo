@@ -868,35 +868,168 @@ document.addEventListener('visibilitychange', async () => {
 
 // ---------- Nova conversa ----------
 
-function openNewChat() {
-  $('new-chat-email').value = ''
-  setMsg($('new-chat-msg'), '')
-  $('new-chat-dialog').showModal()
+// Uma busca só: nome filtra os contatos; e-mail completo ou telefone com DDD procura no Nexo.
+
+const APP_URL = location.origin + location.pathname
+const INVITE_TEXT = `Vamos conversar pelo Nexo! É só abrir ${APP_URL} e entrar.`
+const hasContactPicker = 'contacts' in navigator && 'select' in navigator.contacts
+let pickerSeq = 0
+let pickerTimer = null
+
+function queryKind(q) {
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(q)) return 'email'
+  const digits = q.replace(/\D/g, '')
+  if (/^[\d\s()+.-]+$/.test(q) && digits.length >= 10) return 'phone'
+  if (q.includes('@') || (/^[\d\s()+.-]+$/.test(q) && digits.length > 0)) return 'partial'
+  return 'name'
 }
-$('new-chat-btn').addEventListener('click', openNewChat)
-$('new-chat-empty').addEventListener('click', openNewChat)
 
-$('new-chat-form').addEventListener('submit', async (e) => {
-  e.preventDefault()
-  const btn = e.submitter
-  btn.disabled = true
-  setMsg($('new-chat-msg'), 'Procurando…')
+function pickerRow(person, subtitle, action) {
+  const li = el('li')
+  const row = el('button', 'picker-item')
+  row.type = 'button'
+  const av = el('div', 'avatar')
+  avatar(av, person.name, person.id, person.avatar_url)
+  const main = el('span', 'picker-item-main')
+  main.append(el('strong', null, person.name))
+  if (subtitle) main.append(el('small', null, subtitle))
+  row.append(av, main)
+  if (action) row.append(el('span', 'btn btn-small', action))
+  row.addEventListener('click', () => startChatWith(person.id, row))
+  li.append(row)
+  return li
+}
 
-  const query = $('new-chat-email').value.trim()
-  const { data: found, error } = await supabase.rpc('find_user', { p_query: query })
-  if (error || !found?.length) {
-    btn.disabled = false
-    const what = query.includes('@') ? 'esse e-mail' : 'esse telefone'
-    return setMsg($('new-chat-msg'), `Ninguém com ${what} usa o Nexo ainda. Peça para a pessoa entrar uma vez.`, true)
+function renderPickerContacts(q) {
+  const contacts = state.conversations
+  const n = normalize(q)
+  const shown = q ? contacts.filter((c) => normalize(c.other_name).includes(n)) : contacts
+  const list = $('picker-contacts')
+  list.replaceChildren(
+    ...shown.map((c) =>
+      pickerRow({ id: c.other_id, name: c.other_name, avatar_url: c.other_avatar }, c.last_body || 'Nova conversa'),
+    ),
+  )
+  $('picker-count').textContent = contacts.length === 1 ? '1 contato' : `${contacts.length} contatos`
+  const empty = $('picker-contacts-empty')
+  empty.hidden = shown.length > 0
+  empty.textContent = contacts.length
+    ? 'Nenhum contato com esse nome.'
+    : 'Você ainda não tem contatos. Busque alguém pelo e-mail ou telefone.'
+  $('picker-contacts-section').hidden = !!q && shown.length === 0 && queryKind(q) !== 'name'
+}
+
+function resetPickerSearch() {
+  $('picker-hint').hidden = true
+  $('picker-found-section').hidden = true
+  $('picker-notfound').hidden = true
+}
+
+async function updatePicker() {
+  const q = $('picker-input').value.trim()
+  const kind = queryKind(q)
+  const seq = ++pickerSeq
+  clearTimeout(pickerTimer)
+  resetPickerSearch()
+  renderPickerContacts(kind === 'name' ? q : '')
+  if (!q || kind === 'name') return
+
+  const hint = $('picker-hint')
+  hint.hidden = false
+  if (kind === 'partial') {
+    hint.textContent = q.includes('@')
+      ? 'Continue digitando o e-mail completo…'
+      : 'Digite o telefone com DDD, por exemplo (11) 91234-5678.'
+    return
   }
 
-  const { data: convId, error: err2 } = await supabase.rpc('start_direct_chat', { p_other: found[0].id })
-  btn.disabled = false
-  if (err2) return setMsg($('new-chat-msg'), err2.message, true)
+  hint.textContent = 'Procurando no Nexo…'
+  pickerTimer = setTimeout(async () => {
+    const { data: found, error } = await supabase.rpc('find_user', { p_query: q })
+    if (seq !== pickerSeq) return
+    hint.hidden = true
+    if (error) {
+      hint.hidden = false
+      hint.textContent = 'Não foi possível procurar agora. Verifique a internet.'
+      return
+    }
+    if (found?.length) {
+      $('picker-found').replaceChildren(...found.map((p) => pickerRow(p, q, 'Conversar')))
+      $('picker-found-section').hidden = false
+    } else {
+      showNotFound(q, kind)
+    }
+  }, 400)
+}
 
+function showNotFound(q, kind) {
+  $('picker-notfound-title').textContent =
+    kind === 'email' ? 'Ninguém com esse e-mail usa o Nexo ainda.' : 'Ninguém com esse telefone usa o Nexo ainda.'
+  const direct = $('invite-direct')
+  if (kind === 'phone') {
+    let digits = q.replace(/\D/g, '').replace(/^0+/, '')
+    if (digits.length <= 11) digits = '55' + digits
+    direct.href = `https://wa.me/${digits}?text=${encodeURIComponent(INVITE_TEXT)}`
+    direct.textContent = 'Convidar pelo WhatsApp'
+  } else {
+    direct.href = `mailto:${q}?subject=${encodeURIComponent('Vamos conversar pelo Nexo')}&body=${encodeURIComponent(INVITE_TEXT)}`
+    direct.textContent = 'Convidar por e-mail'
+  }
+  $('picker-notfound').hidden = false
+}
+
+async function shareInvite() {
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Nexo', text: INVITE_TEXT, url: APP_URL })
+    } catch {
+      // a pessoa fechou a janela de compartilhar
+    }
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(INVITE_TEXT)
+    toast('Convite copiado. Cole onde quiser enviar.')
+  } catch {
+    toast(INVITE_TEXT)
+  }
+}
+
+async function startChatWith(userId, row) {
+  row.disabled = true
+  const { data: convId, error } = await supabase.rpc('start_direct_chat', { p_other: userId })
+  row.disabled = false
+  if (error) return toast('Não foi possível abrir a conversa: ' + error.message)
   $('new-chat-dialog').close()
   await loadConversations(convId)
   openById(convId)
+}
+
+function openNewChat() {
+  $('picker-input').value = ''
+  $('pick-contact').hidden = !hasContactPicker
+  updatePicker()
+  $('new-chat-dialog').showModal()
+  $('picker-input').focus()
+}
+$('new-chat-btn').addEventListener('click', openNewChat)
+$('new-chat-empty').addEventListener('click', openNewChat)
+$('picker-input').addEventListener('input', updatePicker)
+$('invite-btn').addEventListener('click', shareInvite)
+$('invite-share').addEventListener('click', shareInvite)
+
+// Agenda do celular (Chrome no Android): pega o telefone ou e-mail e procura no Nexo.
+$('pick-contact').addEventListener('click', async () => {
+  try {
+    const [contact] = await navigator.contacts.select(['name', 'tel', 'email'], { multiple: false })
+    if (!contact) return
+    const value = contact.tel?.[0] || contact.email?.[0]
+    if (!value) return toast('Esse contato não tem telefone nem e-mail.')
+    $('picker-input').value = value
+    updatePicker()
+  } catch {
+    // a pessoa cancelou
+  }
 })
 
 // ---------- Perfil ----------
