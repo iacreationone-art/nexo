@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Nexo</title>
+  <meta name="description" content="Nexo — mensagens em tempo real">
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Nexo">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Carregando -->
+  <div id="splash" class="splash"><img src="icons/icon.svg" alt="" width="72" height="72"></div>
+
+  <!-- Login -->
+  <section id="login" class="login" hidden>
+    <div class="login-card">
+      <img src="icons/icon.svg" alt="" width="64" height="64">
+      <h1>Nexo</h1>
+      <p class="muted">Entre com seu e-mail. Vamos enviar um código de acesso.</p>
+
+      <form id="email-form">
+        <input id="email-input" type="email" placeholder="seu@email.com" autocomplete="email" required>
+        <button type="submit" class="btn">Enviar código</button>
+      </form>
+
+      <form id="code-form" hidden>
+        <p class="muted">Enviamos um e-mail para <strong id="email-sent"></strong>. Toque no link do e-mail para entrar ou, se ele trouxer um código, digite abaixo.</p>
+        <input id="code-input" inputmode="numeric" autocomplete="one-time-code" placeholder="Código" required>
+        <button type="submit" class="btn">Entrar</button>
+        <button type="button" id="change-email" class="btn-link">Usar outro e-mail</button>
+      </form>
+
+      <p id="login-msg" class="form-msg" role="status"></p>
+    </div>
+  </section>
+
+  <!-- App -->
+  <main id="app" class="app" hidden>
+    <!-- Lista de conversas -->
+    <aside class="sidebar">
+      <header class="bar">
+        <button id="me-btn" class="avatar-btn" title="Meu perfil"></button>
+        <h2>Conversas</h2>
+        <button id="new-chat-btn" class="icon-btn" title="Nova conversa" aria-label="Nova conversa">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 5a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H6a1 1 0 1 1 0-2h5V6a1 1 0 0 1 1-1z"/></svg>
+        </button>
+      </header>
+
+      <div id="install-banner" class="install-banner" hidden>
+        <span id="install-text">Instale o Nexo na tela inicial</span>
+        <button id="install-btn" class="btn btn-small">Instalar</button>
+        <button id="install-close" class="icon-btn" aria-label="Fechar">✕</button>
+      </div>
+
+      <ul id="conv-list" class="conv-list"></ul>
+      <div id="conv-empty" class="empty" hidden>
+        <p>Nenhuma conversa ainda.</p>
+        <button id="new-chat-empty" class="btn">Começar uma conversa</button>
+      </div>
+    </aside>
+
+    <!-- Conversa aberta -->
+    <section id="chat" class="chat">
+      <div id="chat-placeholder" class="chat-placeholder">
+        <img src="icons/icon.svg" alt="" width="80" height="80">
+        <p class="muted">Selecione uma conversa</p>
+      </div>
+
+      <div id="chat-view" class="chat-view" hidden>
+        <header class="bar">
+          <button id="back-btn" class="icon-btn back" aria-label="Voltar">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M15.7 5.3a1 1 0 0 1 0 1.4L10.4 12l5.3 5.3a1 1 0 0 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z"/></svg>
+          </button>
+          <div id="chat-avatar" class="avatar"></div>
+          <div class="chat-title">
+            <strong id="chat-name"></strong>
+            <small id="chat-status" class="muted"></small>
+          </div>
+        </header>
+
+        <div id="messages" class="messages"></div>
+
+        <form id="send-form" class="composer">
+          <textarea id="msg-input" rows="1" placeholder="Mensagem" maxlength="4000"></textarea>
+          <button type="submit" class="send-btn" aria-label="Enviar">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6l-.1 6.5L15 12 3.3 13.9z"/></svg>
+          </button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <!-- Nova conversa -->
+  <dialog id="new-chat-dialog">
+    <form id="new-chat-form" method="dialog">
+      <h3>Nova conversa</h3>
+      <p class="muted">Digite o e-mail de quem já usa o Nexo.</p>
+      <input id="new-chat-email" type="email" placeholder="contato@email.com" required>
+      <p id="new-chat-msg" class="form-msg" role="status"></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn-link" data-close>Cancelar</button>
+        <button type="submit" class="btn">Conversar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Perfil -->
+  <dialog id="profile-dialog">
+    <form id="profile-form" method="dialog">
+      <h3>Meu perfil</h3>
+      <label>Nome
+        <input id="profile-name" maxlength="60" required>
+      </label>
+      <p class="muted small" id="profile-email"></p>
+      <button type="button" id="notify-btn" class="btn-link">Ativar notificações</button>
+      <p id="profile-msg" class="form-msg" role="status"></p>
+      <div class="dialog-actions">
+        <button type="button" id="logout-btn" class="btn-link danger">Sair</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn-link" data-close>Fechar</button>
+        <button type="submit" class="btn">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
