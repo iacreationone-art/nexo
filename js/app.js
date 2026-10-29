@@ -1325,20 +1325,33 @@ $('install-close').addEventListener('click', () => {
 
 // Mantém o app do tamanho da área visível: com o teclado aberto, o topo e a caixa
 // de mensagem continuam na tela (principalmente no iPhone, que não encolhe a página).
+// Só mexe no tamanho quando o teclado está aberto; no resto do tempo vale o 100dvh do CSS.
+let fitFrame = 0
+let keyboardOpen = false
+
 function fitViewport() {
-  const vv = window.visualViewport
-  if (!vv) return
-  const root = document.documentElement.style
-  root.setProperty('--app-h', vv.height + 'px')
-  root.setProperty('--app-top', vv.offsetTop + 'px')
-  if (!$('app').hidden && window.scrollY) window.scrollTo(0, 0)
-  // Teclado abriu enquanto digita: as últimas mensagens continuam à vista.
-  if (document.activeElement === $('msg-input')) $('messages').scrollTop = $('messages').scrollHeight
+  cancelAnimationFrame(fitFrame)
+  fitFrame = requestAnimationFrame(() => {
+    const vv = window.visualViewport
+    const root = document.documentElement.style
+    const open = vv && vv.height > 200 && window.innerHeight - vv.height > 120
+    if (open) {
+      root.setProperty('--app-h', Math.round(vv.height) + 'px')
+      root.setProperty('--app-top', Math.round(vv.offsetTop) + 'px')
+    } else {
+      root.removeProperty('--app-h')
+      root.removeProperty('--app-top')
+    }
+    // Teclado acabou de abrir enquanto digita: as últimas mensagens continuam à vista.
+    if (open && !keyboardOpen && document.activeElement === $('msg-input')) {
+      $('messages').scrollTop = $('messages').scrollHeight
+    }
+    keyboardOpen = !!open
+  })
 }
 if (window.visualViewport) {
   visualViewport.addEventListener('resize', fitViewport)
   visualViewport.addEventListener('scroll', fitViewport)
-  fitViewport()
 }
 
 // ---------- Início ----------
