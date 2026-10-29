@@ -1,6 +1,32 @@
 // Imagens salvas ("minhas figurinhas"): ficam só neste aparelho, no IndexedDB, separadas por conta.
 // Não vão para o servidor; quando a pessoa envia uma, ela sai cifrada como qualquer foto.
 
+// Animações para os recortes: nome que vai na mensagem → classe do CSS (reaproveita as dos emojis).
+export const CUT_ANIMS = [
+  ['', 'Parado'],
+  ['pula', 'Pulando'],
+  ['balanca', 'Balançando'],
+  ['treme', 'Tremendo'],
+  ['coracao', 'Coração batendo'],
+  ['gira', 'Girando'],
+  ['flutua', 'Flutuando'],
+]
+const ANIM_CLASS = { pula: 'em-jump', balanca: 'cut-balanca', treme: 'em-angry', coracao: 'em-beat', gira: 'em-spin', flutua: 'em-bob' }
+export const cutAnimClass = (a) => (ANIM_CLASS[a] ? 'cut-anim ' + ANIM_CLASS[a] : '')
+export const validAnim = (a) => (ANIM_CLASS[a] ? a : '')
+
+const ANIM_KEY = 'nexo-animacao-recorte'
+export function loadAnim() {
+  try {
+    return validAnim(localStorage.getItem(ANIM_KEY))
+  } catch {
+    return ''
+  }
+}
+export function saveAnim(a) {
+  try { localStorage.setItem(ANIM_KEY, a) } catch {}
+}
+
 const DB = 'nexo-salvas'
 const STORE = 'imagens'
 export const MAX_SAVED = 80

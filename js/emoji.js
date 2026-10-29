@@ -2,6 +2,7 @@
 // e "chuva" de emojis. Tudo local (sem baixar imagens de fora), então nada vaza da criptografia.
 
 import { STICKER_NAMES, stickerSvg, stickerLabel } from './figurinhas.js'
+import { CUT_ANIMS, cutAnimClass, loadAnim, saveAnim } from './salvas.js'
 
 const CATEGORIES = [
   { icon: '🕘', name: 'Recentes', list: [] },
@@ -112,11 +113,37 @@ function saveRecent(emoji) {
 const SAVED = { icon: '⭐', name: 'Salvas', saved: true, list: [] }
 CATEGORIES.push(SAVED)
 
-// saved: { load() → [{ id, blob, name, cutout }], pick(id), remove(id), add(), paste() }
+// saved: { load() → [{ id, blob, name, cutout }], pick(id, anim), remove(id), add(), paste() }
 export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
   CATEGORIES[0].list = loadRecent()
   let savedUrls = []
   let savedTurn = 0
+  let anim = loadAnim() // animação escolhida para os recortes
+
+  // Fileira "Animação: Parado · Pulando · …". Trocar muda na hora os recortes do painel.
+  function animRow() {
+    const row = document.createElement('div')
+    row.className = 'anim-row'
+    row.setAttribute('role', 'radiogroup')
+    row.setAttribute('aria-label', 'Animação dos recortes')
+    row.append(Object.assign(document.createElement('small'), { textContent: 'Animação dos recortes:' }))
+    for (const [value, label] of CUT_ANIMS) {
+      const chip = document.createElement('button')
+      chip.type = 'button'
+      chip.className = 'anim-chip'
+      chip.dataset.anim = value
+      chip.textContent = label
+      chip.setAttribute('role', 'radio')
+      chip.setAttribute('aria-checked', String(value === anim))
+      row.append(chip)
+    }
+    return row
+  }
+
+  function applyAnim() {
+    grid.querySelectorAll('.anim-chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.anim === anim)))
+    grid.querySelectorAll('.saved-cell.cutout img').forEach((img) => (img.className = cutAnimClass(anim)))
+  }
 
   async function showSaved() {
     const turn = ++savedTurn
@@ -147,6 +174,7 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       b.title = 'Enviar ' + item.name
       const img = document.createElement('img')
       img.alt = item.name
+      if (item.cutout) img.className = cutAnimClass(anim)
       img.src = URL.createObjectURL(item.blob)
       savedUrls.push(img.src)
       const del = document.createElement('span')
@@ -158,7 +186,7 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       b.append(img, del)
       return b
     })
-    grid.replaceChildren(add, paste, ...cells)
+    grid.replaceChildren(animRow(), add, paste, ...cells)
     if (!items.length) {
       const p = document.createElement('p')
       p.className = 'emoji-empty'
@@ -218,6 +246,13 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
   })
 
   grid.addEventListener('click', (e) => {
+    const chip = e.target.closest('.anim-chip')
+    if (chip) {
+      anim = chip.dataset.anim
+      saveAnim(anim)
+      applyAnim()
+      return
+    }
     const cell = e.target.closest('.emoji-cell')
     if (!cell) return
     const del = e.target.closest('[data-del]')
@@ -231,7 +266,7 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       cell.classList.remove('pop')
       void cell.offsetWidth // reinicia a animação
       cell.classList.add('pop')
-      saved.pick(cell.dataset.saved)
+      saved.pick(cell.dataset.saved, anim)
       return
     }
     if (cell.dataset.fig) {
