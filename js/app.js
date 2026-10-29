@@ -106,6 +106,17 @@ $('google-btn').addEventListener('click', async () => {
   }
 })
 
+function loginErrorText(error) {
+  const msg = (error.message || '').toLowerCase()
+  if (error.status === 429 || msg.includes('rate limit')) {
+    return /seconds|segundos/.test(msg)
+      ? 'Aguarde um minuto antes de pedir outro código.'
+      : 'Muitos códigos enviados na última hora. Tente de novo mais tarde' +
+          ($('google-area').hidden ? '.' : ' ou entre com o Google.')
+  }
+  return error.message
+}
+
 // O botão do Google só aparece se o login com Google estiver ligado no Supabase.
 async function checkGoogleEnabled() {
   $('google-area').hidden = true
@@ -138,7 +149,7 @@ $('email-form').addEventListener('submit', async (e) => {
     options: { emailRedirectTo: location.origin + location.pathname },
   })
   btn.disabled = false
-  if (error) return setMsg($('login-msg'), error.message, true)
+  if (error) return setMsg($('login-msg'), loginErrorText(error), true)
   $('email-sent').textContent = email
   $('google-area').hidden = true
   $('email-form').hidden = true
