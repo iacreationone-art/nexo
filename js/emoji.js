@@ -142,7 +142,8 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
 
   function applyAnim() {
     grid.querySelectorAll('.anim-chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.anim === anim)))
-    grid.querySelectorAll('.saved-cell.cutout img').forEach((img) => (img.className = cutAnimClass(anim)))
+    // Recortes com animação própria (salvos de uma mensagem) não mudam.
+    grid.querySelectorAll('.saved-cell.cutout:not([data-own-anim]) img').forEach((img) => (img.className = cutAnimClass(anim)))
   }
 
   async function showSaved() {
@@ -174,7 +175,8 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       b.title = 'Enviar ' + item.name
       const img = document.createElement('img')
       img.alt = item.name
-      if (item.cutout) img.className = cutAnimClass(anim)
+      if (item.anim) b.dataset.ownAnim = item.anim
+      if (item.cutout) img.className = cutAnimClass(item.anim || anim)
       img.src = URL.createObjectURL(item.blob)
       savedUrls.push(img.src)
       const del = document.createElement('span')
@@ -266,7 +268,7 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       cell.classList.remove('pop')
       void cell.offsetWidth // reinicia a animação
       cell.classList.add('pop')
-      saved.pick(cell.dataset.saved, anim)
+      saved.pick(cell.dataset.saved, cell.dataset.ownAnim || anim)
       return
     }
     if (cell.dataset.fig) {

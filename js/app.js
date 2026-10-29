@@ -1202,17 +1202,20 @@ async function messageFile(m) {
 }
 
 // ⭐ Salvar: a imagem vai para a aba "Salvas" do painel de emojis (só neste aparelho).
-$('viewer-save').addEventListener('click', async () => {
-  if (!viewerMsg) return
+// Recorte animado recebido é salvo com a mesma animação, para reenviar igualzinho.
+async function saveMessageImage(m) {
   try {
-    const file = await messageFile(viewerMsg)
-    const added = await addSaved(state.user.id, file, file.name, { cutout: await isCutout(file) })
+    const file = await messageFile(m)
+    const cutout = m.sticker || (await isCutout(file))
+    const added = await addSaved(state.user.id, file, file.name, { cutout, anim: m.stickerAnim })
     toast(added ? '⭐ Salva! Ela fica na aba ⭐ do painel de emojis.' : 'Essa imagem já está nas salvas.')
     emojiPicker.refreshSaved()
   } catch (err) {
     toast('Não foi possível salvar: ' + err.message)
   }
-})
+}
+
+$('viewer-save').addEventListener('click', () => viewerMsg && saveMessageImage(viewerMsg))
 
 // Encaminhar: escolhe a conversa, abre ela e manda a mesma foto lá.
 $('viewer-forward').addEventListener('click', () => {
@@ -1261,6 +1264,7 @@ function openMsgMenu(bubble) {
   menuMsg = m
   const mine = m.sender_id === state.user.id
   $('msg-copy').hidden = !(m.body && !m.deleted_at && !m.locked && !stickerOf(m.body))
+  $('msg-save').hidden = !(m.attachment_path && (m.attachment_type || '').startsWith('image/') && !m.locked)
   $('msg-delete-all').hidden = !mine || !!m.deleted_at
   // Fecha o teclado e o painel de emojis: senão eles cobrem as opções de baixo do menu.
   document.activeElement?.blur()
@@ -1311,6 +1315,11 @@ msgBox.addEventListener('click', (e) => {
 
 $('msg-menu').addEventListener('click', (e) => {
   if (e.target.id === 'msg-menu') $('msg-menu').close() // tocou fora
+})
+
+$('msg-save').addEventListener('click', () => {
+  $('msg-menu').close()
+  saveMessageImage(menuMsg)
 })
 
 $('msg-copy').addEventListener('click', async () => {

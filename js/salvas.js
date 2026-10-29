@@ -60,13 +60,14 @@ export async function listSaved(owner) {
 }
 
 // extra.cutout: imagem recortada (fundo transparente), que vai como figurinha.
+// extra.anim: animação própria (recorte animado recebido); sem ela, vale a escolhida no painel.
 export async function addSaved(owner, blob, name, extra = {}) {
   if (blob.size > MAX_SAVED_SIZE) throw new Error('imagem grande demais (máximo 8 MB)')
   const list = await listSaved(owner)
   if (list.length >= MAX_SAVED) throw new Error(`você já tem ${MAX_SAVED} imagens salvas; apague alguma antes`)
   // A mesma imagem não entra duas vezes.
   if (list.some((x) => x.size === blob.size && x.name === name)) return false
-  const item = { id: crypto.randomUUID(), owner, blob, name: name || 'imagem', type: blob.type, size: blob.size, at: Date.now(), cutout: !!extra.cutout }
+  const item = { id: crypto.randomUUID(), owner, blob, name: name || 'imagem', type: blob.type, size: blob.size, at: Date.now(), cutout: !!extra.cutout, anim: validAnim(extra.anim) }
   await run('readwrite', (s) => s.put(item))
   return true
 }
