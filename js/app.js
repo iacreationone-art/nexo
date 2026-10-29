@@ -93,6 +93,28 @@ function show(screen) {
 
 // ---------- Login ----------
 
+$('google-btn').addEventListener('click', async () => {
+  $('google-btn').disabled = true
+  setMsg($('login-msg'), 'Abrindo o Google…')
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: location.origin + location.pathname },
+  })
+  if (error) {
+    $('google-btn').disabled = false
+    setMsg($('login-msg'), error.message, true)
+  }
+})
+
+// Se o Google ou o Supabase devolveram um erro no endereço, mostra na tela de login.
+function showLoginErrorFromUrl() {
+  const params = new URLSearchParams(location.hash.slice(1) || location.search)
+  const desc = params.get('error_description')
+  if (!desc) return
+  setMsg($('login-msg'), 'Não foi possível entrar: ' + desc.replace(/\+/g, ' '), true)
+  history.replaceState(history.state, '', location.pathname)
+}
+
 $('email-form').addEventListener('submit', async (e) => {
   e.preventDefault()
   const email = $('email-input').value.trim().toLowerCase()
@@ -106,6 +128,7 @@ $('email-form').addEventListener('submit', async (e) => {
   btn.disabled = false
   if (error) return setMsg($('login-msg'), error.message, true)
   $('email-sent').textContent = email
+  $('google-area').hidden = true
   $('email-form').hidden = true
   $('code-form').hidden = false
   $('code-input').focus()
@@ -130,6 +153,7 @@ $('code-form').addEventListener('submit', async (e) => {
 $('change-email').addEventListener('click', () => {
   $('code-form').hidden = true
   $('email-form').hidden = false
+  $('google-area').hidden = false
   $('code-input').value = ''
   setMsg($('login-msg'), '')
 })
@@ -143,7 +167,10 @@ async function handleSession(session) {
   if (state.user) teardown()
   state.user = user
   if (user) await startApp()
-  else show('login')
+  else {
+    show('login')
+    showLoginErrorFromUrl()
+  }
 }
 
 async function startApp() {
@@ -1144,6 +1171,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js')
 if (!configured) {
   show('login')
   $('email-form').hidden = true
+  $('google-area').hidden = true
   setMsg($('login-msg'), 'Configure SUPABASE_URL e SUPABASE_ANON_KEY em js/config.js.', true)
 } else {
   // setTimeout evita chamar o Supabase de dentro do callback de autenticação.

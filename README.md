@@ -8,7 +8,7 @@ Abra no navegador do celular e use **Adicionar à tela inicial**: o Nexo vira um
 
 ## Recursos
 
-- Login por código enviado ao e-mail
+- Entrar com Google ou com código enviado ao e-mail
 - Conversas 1 a 1 começadas pelo e-mail ou telefone do contato
 - Fotos e arquivos (até 20 MB) em pasta privada da conversa
 - Perfil com foto, recado e telefone; dados do contato com Ligar e WhatsApp
@@ -56,7 +56,20 @@ No SQL Editor, rode (nesta ordem, depois do `schema.sql`):
 2. [`supabase/prioridade1.sql`](supabase/prioridade1.sql) — fotos e arquivos nas conversas, telefone,
    dados do contato e apagar conversa (só para quem apagou)
 
-### 4. Notificações push (opcional)
+### 4. Entrar com Google (opcional)
+
+1. Em [console.cloud.google.com](https://console.cloud.google.com), crie um projeto `Nexo`.
+2. **Google Auth Platform → Branding**: nome do app `Nexo` e seu e-mail de suporte. Em **Audience**, escolha
+   *External* e clique em **Publish app**.
+3. **Clients → Create client** → *Web application*:
+   - *Authorized JavaScript origins*: `https://iacreationone-art.github.io`
+   - *Authorized redirect URIs*: `https://ngfyqbcqkecudbkdvqph.supabase.co/auth/v1/callback`
+4. Copie o **Client ID** e o **Client secret**.
+5. No Supabase: **Authentication → Sign In / Providers → Google** → ligue, cole os dois valores e salve.
+
+Quem já entrou por e-mail e depois entra com o Google do mesmo e-mail continua na mesma conta.
+
+### 5. Notificações push (opcional)
 
 Avisam de mensagens novas mesmo com o app fechado. As chaves secretas ficam fora do repositório
 (arquivo `nexo-segredos.txt`) — nunca as coloque no GitHub.
@@ -82,5 +95,4 @@ Ao publicar mudanças, aumente a versão em `sw.js` (`const CACHE = 'nexo-v2'`) 
 
 - Mensagens de áudio
 - Grupos
-- Foto de perfil
 - Canais privados do Realtime para "online" e "digitando…"

@@ -148,6 +148,33 @@ input:focus, textarea:focus { border-color: var(--primary); }
 .login-card h1 { margin: .5rem 0 .25rem; }
 .login-card form { display: grid; gap: 12px; margin-top: 16px; }
 
+.google-btn {
+  width: 100%;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: .7rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+}
+.google-btn:hover { background: var(--surface-2); }
+.google-btn:disabled { opacity: .6; cursor: default; }
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: .85rem;
+}
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
 /* ---------- Layout do app ---------- */
 
 .app {

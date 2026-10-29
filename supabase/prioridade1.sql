@@ -261,3 +261,26 @@ language sql security definer stable set search_path = '' as $$
     and (c.id = p_conv or me.hidden_at is null or lm.id is not null)
   order by 6 desc;
 $$;
+
+
+-- =============================================================
+-- 6. Entrar com Google: o perfil já nasce com o nome e a foto da conta Google
+-- (para quem entra por e-mail, continua usando o começo do e-mail como nome)
+-- =============================================================
+
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profiles (id, email, name, avatar_url)
+  values (
+    new.id,
+    lower(new.email),
+    left(coalesce(
+      nullif(trim(new.raw_user_meta_data->>'full_name'), ''),
+      nullif(trim(new.raw_user_meta_data->>'name'), ''),
+      split_part(new.email, '@', 1)
+    ), 60),
+    nullif(new.raw_user_meta_data->>'avatar_url', '')
+  );
+  return new;
+end $$;
