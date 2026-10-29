@@ -2,6 +2,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY, VAPID_PUBLIC_KEY } from './config.js'
 import * as cripto from './cripto.js'
 import { emojiOnly, motionFor, emojiRain, setupEmojiPicker } from './emoji.js'
 import { stickerOf, stickerText, stickerSvg, stickerRain } from './figurinhas.js'
+import { listSaved, addSaved, removeSaved, getSaved } from './salvas.js'
 
 const $ = (id) => document.getElementById(id)
 const configured = !SUPABASE_URL.includes('SEU-PROJETO') && !SUPABASE_ANON_KEY.includes('SUA_ANON_KEY')
@@ -1134,9 +1135,12 @@ function renderAttachment(m, bubble) {
   return a
 }
 
+let viewerMsg = null
+
 async function openViewer(m) {
   try {
     const url = await fileUrl(m)
+    viewerMsg = m
     $('viewer-img').src = url
     $('viewer-download').href = downloadUrl(m, url)
     $('viewer-download').download = m.attachment_name || 'foto.jpg'
@@ -1149,6 +1153,63 @@ async function openViewer(m) {
 $('viewer').addEventListener('click', (e) => {
   if (e.target.id === 'viewer' || e.target.id === 'viewer-img') $('viewer').close()
 })
+
+// A foto da mensagem, já aberta (sem criptografia), pronta para salvar ou reenviar.
+async function messageFile(m) {
+  const blob = await (await fetch(await fileUrl(m))).blob()
+  const type = m.attachment_type || blob.type || 'image/jpeg'
+  return new File([blob], m.attachment_name || 'foto.jpg', { type })
+}
+
+// ⭐ Salvar: a imagem vai para a aba "Salvas" do painel de emojis (só neste aparelho).
+$('viewer-save').addEventListener('click', async () => {
+  if (!viewerMsg) return
+  try {
+    const file = await messageFile(viewerMsg)
+    const added = await addSaved(state.user.id, file, file.name)
+    toast(added ? '⭐ Salva! Ela fica na aba ⭐ do painel de emojis.' : 'Essa imagem já está nas salvas.')
+    emojiPicker.refreshSaved()
+  } catch (err) {
+    toast('Não foi possível salvar: ' + err.message)
+  }
+})
+
+// Encaminhar: escolhe a conversa, abre ela e manda a mesma foto lá.
+$('viewer-forward').addEventListener('click', () => {
+  const m = viewerMsg
+  if (!m) return
+  const rows = state.conversations.map((c) => {
+    const li = el('li')
+    const row = el('button', 'picker-item')
+    row.type = 'button'
+    const av = el('div', 'avatar')
+    avatar(av, c.other_name, c.other_id, c.other_avatar)
+    const main = el('span', 'picker-item-main')
+    main.append(el('strong', null, c.other_name))
+    row.append(av, main)
+    row.addEventListener('click', () => forwardTo(m, c, row))
+    li.append(row)
+    return li
+  })
+  $('forward-list').replaceChildren(...rows)
+  $('forward-empty').hidden = rows.length > 0
+  $('forward-dialog').showModal()
+})
+
+async function forwardTo(m, c, row) {
+  row.disabled = true
+  let file
+  try {
+    file = await messageFile(m)
+  } catch {
+    row.disabled = false
+    return toast('Não foi possível pegar a foto.')
+  }
+  $('forward-dialog').close()
+  $('viewer').close()
+  await openConversation(c)
+  if (state.current === c) await sendAttachment(file)
+}
 
 // Fotos grandes viram JPEG de até 1600px (economiza internet e espaço). GIFs vão como estão.
 function shrinkImage(file, max = 1600) {
@@ -1253,6 +1314,32 @@ const emojiPicker = setupEmojiPicker({
   button: $('emoji-btn'),
   panel: $('emoji-panel'),
   onSticker: (name) => sendText(stickerText(name)),
+  saved: {
+    load: () => listSaved(state.user.id),
+    remove: removeSaved,
+    add: () => $('saved-input').click(),
+    pick: async (id) => {
+      const item = await getSaved(id).catch(() => null)
+      if (item) sendAttachment(new File([item.blob], item.name, { type: item.type }))
+    },
+  },
+})
+
+// "+" na aba Salvas: guarda imagens do celular (sem enviar).
+$('saved-input').addEventListener('change', async (e) => {
+  const files = [...e.target.files]
+  e.target.value = ''
+  let n = 0
+  for (const f of files) {
+    try {
+      if (await addSaved(state.user.id, f, f.name)) n++
+    } catch (err) {
+      toast(`"${f.name}": ${err.message}`)
+      break
+    }
+  }
+  if (n) toast(n === 1 ? '⭐ Imagem salva.' : `⭐ ${n} imagens salvas.`)
+  emojiPicker.refreshSaved()
 })
 
 function autosize() {

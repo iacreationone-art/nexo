@@ -21,6 +21,7 @@
   <link rel="modulepreload" href="js/cripto.js">
   <link rel="modulepreload" href="js/emoji.js">
   <link rel="modulepreload" href="js/figurinhas.js">
+  <link rel="modulepreload" href="js/salvas.js">
   <!-- Biblioteca do Supabase num arquivo só. "integrity" garante que é exatamente este arquivo:
        se o site de onde vem mudar uma vírgula, o navegador não roda. -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/dist/umd/supabase.js"
@@ -307,6 +308,12 @@
   <!-- Ver foto -->
   <dialog id="viewer" class="viewer">
     <div class="viewer-bar">
+      <button type="button" id="viewer-save" class="icon-btn" title="Salvar nas minhas imagens" aria-label="Salvar nas minhas imagens">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="m12 17.3-6.2 3.7 1.6-7L2 9.2l7.2-.6L12 2l2.8 6.6 7.2.6-5.4 4.8 1.6 7z"/></svg>
+      </button>
+      <button type="button" id="viewer-forward" class="icon-btn" title="Encaminhar" aria-label="Encaminhar">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M14 5v4C7 10 4 15 3 20c2.5-3.5 6-5.1 11-5.1V19l7-7z"/></svg>
+      </button>
       <a id="viewer-download" class="icon-btn" href="#" download title="Baixar" aria-label="Baixar">
         <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M11 4h2v9.2l3.3-3.3 1.4 1.4L12 17l-5.7-5.7 1.4-1.4 3.3 3.3zM5 19h14v2H5z"/></svg>
       </a>
@@ -314,6 +321,24 @@
     </div>
     <img id="viewer-img" alt="">
   </dialog>
+
+  <!-- Encaminhar foto -->
+  <dialog id="forward-dialog" class="sheet picker">
+    <div class="picker-body">
+      <header class="sheet-head">
+        <button type="button" class="icon-btn" data-close aria-label="Voltar">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M15.7 5.3a1 1 0 0 1 0 1.4L10.4 12l5.3 5.3a1 1 0 0 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z"/></svg>
+        </button>
+        <h3>Encaminhar para…</h3>
+      </header>
+      <div class="picker-scroll">
+        <ul id="forward-list" class="picker-list"></ul>
+        <p id="forward-empty" class="picker-hint muted" hidden>Você ainda não tem conversas.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <input id="saved-input" type="file" accept="image/*" multiple hidden>
 
   <!-- Senha de recuperação (criptografia de ponta a ponta) -->
   <dialog id="keys-dialog" class="keys-dialog">

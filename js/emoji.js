@@ -108,8 +108,58 @@ function saveRecent(emoji) {
   CATEGORIES[0].list = list
 }
 
-export function setupEmojiPicker({ input, button, panel, onSticker }) {
+// Aba "Salvas": imagens que a pessoa guardou neste aparelho (quem guarda é o app.js).
+const SAVED = { icon: '⭐', name: 'Salvas', saved: true, list: [] }
+CATEGORIES.push(SAVED)
+
+// saved: { load() → [{ id, blob, name }], pick(id), remove(id), add() }
+export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
   CATEGORIES[0].list = loadRecent()
+  let savedUrls = []
+  let savedTurn = 0
+
+  async function showSaved() {
+    const turn = ++savedTurn
+    let items = []
+    try {
+      items = await saved.load()
+    } catch {}
+    if (turn !== savedTurn || CATEGORIES[current] !== SAVED) return
+    savedUrls.forEach((u) => URL.revokeObjectURL(u))
+    savedUrls = []
+    const add = document.createElement('button')
+    add.type = 'button'
+    add.className = 'emoji-cell saved-cell saved-add'
+    add.dataset.add = '1'
+    add.title = 'Adicionar imagem do celular'
+    add.innerHTML = '<span aria-hidden="true">+</span><small>Adicionar</small>'
+    const cells = items.map((item) => {
+      const b = document.createElement('button')
+      b.type = 'button'
+      b.className = 'emoji-cell saved-cell'
+      b.dataset.saved = item.id
+      b.title = 'Enviar ' + item.name
+      const img = document.createElement('img')
+      img.alt = item.name
+      img.src = URL.createObjectURL(item.blob)
+      savedUrls.push(img.src)
+      const del = document.createElement('span')
+      del.className = 'saved-del'
+      del.dataset.del = item.id
+      del.setAttribute('role', 'button')
+      del.setAttribute('aria-label', 'Apagar ' + item.name)
+      del.textContent = '×'
+      b.append(img, del)
+      return b
+    })
+    grid.replaceChildren(add, ...cells)
+    if (!items.length) {
+      const p = document.createElement('p')
+      p.className = 'emoji-empty'
+      p.textContent = 'Abra uma foto da conversa e toque na ⭐ para guardá-la aqui, ou toque em + para escolher do celular.'
+      grid.append(p)
+    }
+  }
   const tabs = document.createElement('div')
   tabs.className = 'emoji-tabs'
   tabs.setAttribute('role', 'tablist')
@@ -124,7 +174,8 @@ export function setupEmojiPicker({ input, button, panel, onSticker }) {
     grid.replaceChildren()
     const { list, name, stickers } = CATEGORIES[i]
     grid.setAttribute('aria-label', name)
-    grid.classList.toggle('stickers', !!stickers)
+    grid.classList.toggle('stickers', !!stickers || CATEGORIES[i] === SAVED)
+    if (CATEGORIES[i] === SAVED) return showSaved()
     if (!list.length) {
       const p = document.createElement('p')
       p.className = 'emoji-empty'
@@ -163,6 +214,19 @@ export function setupEmojiPicker({ input, button, panel, onSticker }) {
   grid.addEventListener('click', (e) => {
     const cell = e.target.closest('.emoji-cell')
     if (!cell) return
+    const del = e.target.closest('[data-del]')
+    if (del) {
+      if (confirm('Apagar esta imagem das salvas?')) saved.remove(del.dataset.del).then(showSaved, showSaved)
+      return
+    }
+    if (cell.dataset.add) return saved.add()
+    if (cell.dataset.saved) {
+      cell.classList.remove('pop')
+      void cell.offsetWidth // reinicia a animação
+      cell.classList.add('pop')
+      saved.pick(cell.dataset.saved)
+      return
+    }
     if (cell.dataset.fig) {
       cell.classList.remove('pop')
       void cell.offsetWidth // reinicia a animação
@@ -196,5 +260,9 @@ export function setupEmojiPicker({ input, button, panel, onSticker }) {
   button.addEventListener('click', () => toggle(panel.hidden))
   // Tocar na caixa de mensagem volta para o teclado.
   input.addEventListener('pointerdown', () => matchMedia('(pointer: coarse)').matches && toggle(false))
-  return { close: () => toggle(false) }
+  return {
+    close: () => toggle(false),
+    // Atualiza a aba "Salvas" se ela estiver aberta.
+    refreshSaved: () => !panel.hidden && CATEGORIES[current] === SAVED && showSaved(),
+  }
 }
