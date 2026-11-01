@@ -5,6 +5,18 @@ import { stickerOf, stickerText, stickerSvg, stickerRain } from './figurinhas.js
 import { listSaved, addSaved, removeSaved, getSaved, cutAnimClass, validAnim } from './salvas.js'
 
 const $ = (id) => document.getElementById(id)
+
+// ===== Sem zoom =====
+// O iPhone ignora o user-scalable=no do index.html: a pinça é barrada pelos eventos do
+// Safari e pelo movimento com dois dedos. Com um dedo só (rolar, arrastar) nada muda.
+// Uma área que um dia precisar de zoom próprio (ex.: foto) leva a classe .pode-zoom.
+const podeZoom = (alvo) => alvo && alvo.closest && alvo.closest('.pode-zoom')
+for (const tipo of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(tipo, (e) => { if (!podeZoom(e.target)) e.preventDefault() }, { passive: false })
+}
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length > 1 && !podeZoom(e.target)) e.preventDefault()
+}, { passive: false })
 const configured = !SUPABASE_URL.includes('SEU-PROJETO') && !SUPABASE_ANON_KEY.includes('SUA_ANON_KEY')
 // A biblioteca vem do <script> no index.html (um arquivo só, carregado antes deste).
 const supabase = configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null

@@ -63,12 +63,18 @@ html, body {
   -webkit-tap-highlight-color: transparent;
   /* Sem efeito elástico nem "puxar para atualizar": a tela não estica ao puxar. */
   overscroll-behavior: none;
+  /* Sem zoom: toque duplo não aumenta a tela (e o toque responde sem atraso). */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 [hidden] { display: none !important; }
 
 button { font: inherit; color: inherit; cursor: pointer; }
 input, textarea { font: inherit; color: var(--text); }
+/* O iPhone dá zoom em qualquer campo com letra menor que 16px. */
+input, textarea, select, [contenteditable] { font-size: max(16px, 1em); }
 
 .muted { color: var(--muted); }
 .small { font-size: .85rem; }
