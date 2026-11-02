@@ -2,16 +2,34 @@
 // Tudo feito no próprio aparelho com o Web Audio do navegador: o áudio só sai do celular
 // depois de mudado e cifrado, como qualquer outro arquivo.
 
+// speed: fala mais rápida/lenta (muda a duração). reverse: de trás para frente. tail: segundos a mais no fim (eco).
 export const VOICES = [
   { id: 'normal', icon: '🙂', name: 'Normal' },
   { id: 'esquilo', icon: '🐿️', name: 'Esquilo' },
+  { id: 'ratinho', icon: '🐭', name: 'Ratinho' },
   { id: 'gigante', icon: '👹', name: 'Gigante' },
+  { id: 'urso', icon: '🐻', name: 'Ursão' },
+  { id: 'dino', icon: '🦖', name: 'Dinossauro', tail: 1.2 },
+  { id: 'abelha', icon: '🐝', name: 'Abelha' },
+  { id: 'sapo', icon: '🐸', name: 'Sapo' },
+  { id: 'papagaio', icon: '🦜', name: 'Papagaio' },
   { id: 'robo', icon: '🤖', name: 'Robô' },
+  { id: 'brinquedo', icon: '🧸', name: 'Brinquedo' },
   { id: 'alien', icon: '👽', name: 'Alienígena' },
-  { id: 'fantasma', icon: '👻', name: 'Fantasma' },
-  { id: 'radio', icon: '📻', name: 'Rádio antigo' },
+  { id: 'astronauta', icon: '🚀', name: 'Astronauta', tail: 0.6 },
+  { id: 'fantasma', icon: '👻', name: 'Fantasma', tail: 1.6 },
+  { id: 'caverna', icon: '🏰', name: 'Caverna', tail: 2.5 },
+  { id: 'agua', icon: '🫧', name: 'Debaixo d’água', tail: 0.4 },
+  { id: 'coral', icon: '🎶', name: 'Coral' },
+  { id: 'tontura', icon: '🌀', name: 'Tontura' },
   { id: 'balao', icon: '🎈', name: 'Gás de balão' },
+  { id: 'radio', icon: '📻', name: 'Rádio antigo' },
+  { id: 'telefone', icon: '📞', name: 'Telefone' },
+  { id: 'rapido', icon: '⚡', name: 'Fita rápida', speed: 1.6 },
+  { id: 'lento', icon: '🐢', name: 'Câmera lenta', speed: 0.7 },
+  { id: 'contrario', icon: '🔁', name: 'Ao contrário', reverse: true },
 ]
+const voiceOf = (id) => VOICES.find((v) => v.id === id) || VOICES[0]
 
 const RATE = 24000 // qualidade boa para voz e arquivo menor
 
@@ -91,6 +109,39 @@ function comb(ctx, input, time, feedback) {
   return out
 }
 
+// Salão grande: "eco cheio" feito com ruído que vai sumindo.
+function reverb(ctx, input, seconds, wet) {
+  const len = Math.round(ctx.sampleRate * seconds)
+  const ir = ctx.createBuffer(1, len, ctx.sampleRate)
+  const d = ir.getChannelData(0)
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 3
+  const out = new GainNode(ctx)
+  input.connect(out)
+  input.connect(new ConvolverNode(ctx, { buffer: ir })).connect(new GainNode(ctx, { gain: wet })).connect(out)
+  return out
+}
+
+// Várias vozes juntas, cada uma num tom.
+function chorus(ctx, input, ratios, t0) {
+  const out = new GainNode(ctx)
+  input.connect(new GainNode(ctx, { gain: 0.6 })).connect(out)
+  for (const r of ratios) pitch(ctx, input, r, t0).connect(new GainNode(ctx, { gain: 0.5 })).connect(out)
+  return out
+}
+
+// "Bip" de rádio de astronauta no fim da fala.
+function beep(ctx, out, at) {
+  const osc = new OscillatorNode(ctx, { frequency: 1250 })
+  const g = new GainNode(ctx, { gain: 0 })
+  g.gain.setValueAtTime(0, at)
+  g.gain.linearRampToValueAtTime(0.25, at + 0.01)
+  g.gain.setValueAtTime(0.25, at + 0.16)
+  g.gain.linearRampToValueAtTime(0, at + 0.18)
+  osc.connect(g).connect(out)
+  osc.start(at)
+  osc.stop(at + 0.2)
+}
+
 function filter(ctx, input, type, frequency, extra = {}) {
   return input.connect(new BiquadFilterNode(ctx, { type, frequency, ...extra }))
 }
@@ -105,9 +156,76 @@ function crunch(ctx, input, amount) {
 }
 
 // Monta o efeito: devolve o último nó (que vai para a saída).
-function build(ctx, src, id, t0) {
+// dur: quanto tempo dura a fala (para o "bip" do astronauta cair no fim).
+function build(ctx, src, id, t0, dur) {
   let n = src
   switch (id) {
+    case 'ratinho':
+      n = pitch(ctx, n, 2.1, t0)
+      n = filter(ctx, n, 'highpass', 300)
+      break
+    case 'urso':
+      n = pitch(ctx, n, 0.5, t0)
+      n = filter(ctx, n, 'lowpass', 2500)
+      n = filter(ctx, n, 'lowshelf', 180, { gain: 6 })
+      break
+    case 'dino':
+      n = pitch(ctx, n, 0.55, t0)
+      n = crunch(ctx, n, 8)
+      n = n.connect(new GainNode(ctx, { gain: 0.6 }))
+      n = reverb(ctx, n, 1.2, 0.35)
+      break
+    case 'abelha':
+      n = pitch(ctx, n, 1.5, t0)
+      n = ring(ctx, n, 180, 0.5, t0)
+      break
+    case 'sapo':
+      n = pitch(ctx, n, 0.8, t0)
+      n = ring(ctx, n, 28, 0.6, t0)
+      break
+    case 'papagaio':
+      n = pitch(ctx, n, 1.6, t0)
+      n = wobble(ctx, n, 11, 0.0015, t0)
+      n = filter(ctx, n, 'peaking', 1800, { Q: 0.8, gain: 8 })
+      break
+    case 'brinquedo':
+      n = pitch(ctx, n, 1.55, t0)
+      n = comb(ctx, n, 0.004, 0.6)
+      n = n.connect(new GainNode(ctx, { gain: 0.6 }))
+      break
+    case 'astronauta': {
+      n = filter(ctx, n, 'highpass', 400)
+      n = filter(ctx, n, 'lowpass', 3500)
+      n = crunch(ctx, n, 4)
+      n = reverb(ctx, n, 0.5, 0.2)
+      const out = new GainNode(ctx)
+      n.connect(out)
+      beep(ctx, out, t0 + dur + 0.1)
+      n = out
+      break
+    }
+    case 'caverna':
+      n = reverb(ctx, n, 3, 0.6)
+      n = echo(ctx, n, 0.4, 0.35, 0.4)
+      break
+    case 'agua':
+      n = filter(ctx, n, 'lowpass', 700)
+      n = wobble(ctx, n, 5, 0.004, t0)
+      n = echo(ctx, n, 0.06, 0.3, 0.4)
+      n = n.connect(new GainNode(ctx, { gain: 1.4 }))
+      break
+    case 'coral':
+      n = chorus(ctx, n, [1.26, 0.75], t0)
+      n = reverb(ctx, n, 1, 0.25)
+      break
+    case 'tontura':
+      n = wobble(ctx, n, 2.5, 0.006, t0)
+      break
+    case 'telefone':
+      n = filter(ctx, n, 'bandpass', 1700, { Q: 1.2 })
+      n = crunch(ctx, n, 5)
+      n = n.connect(new GainNode(ctx, { gain: 1.5 }))
+      break
     case 'esquilo':
       n = pitch(ctx, n, 1.75, t0)
       n = filter(ctx, n, 'highpass', 180)
@@ -145,7 +263,25 @@ function build(ctx, src, id, t0) {
   return n.connect(new DynamicsCompressorNode(ctx, { threshold: -14, ratio: 6, attack: 0.003, release: 0.2 }))
 }
 
-const tailFor = (id) => (id === 'fantasma' ? 1.6 : 0.15) // o eco precisa de um tempinho no fim
+const tailFor = (id) => voiceOf(id).tail || 0.15 // o eco precisa de um tempinho no fim
+
+// Quanto tempo a fala dura depois do efeito (fita rápida/lenta muda a duração).
+const spokenLength = (buffer, id) => buffer.duration / (voiceOf(id).speed || 1)
+
+const reversed = new WeakMap()
+function sourceFor(ctx, buffer, id) {
+  const v = voiceOf(id)
+  let buf = buffer
+  if (v.reverse) {
+    buf = reversed.get(buffer)
+    if (!buf) {
+      buf = new AudioBuffer({ length: buffer.length, numberOfChannels: buffer.numberOfChannels, sampleRate: buffer.sampleRate })
+      for (let c = 0; c < buffer.numberOfChannels; c++) buf.getChannelData(c).set(buffer.getChannelData(c).slice().reverse())
+      reversed.set(buffer, buf)
+    }
+  }
+  return new AudioBufferSourceNode(ctx, { buffer: buf, playbackRate: v.speed || 1 })
+}
 
 // ---------- Ler, ouvir e gerar o arquivo ----------
 
@@ -165,8 +301,9 @@ export async function decodeAudio(blob) {
 // Toca o áudio com a voz escolhida. Devolve uma função que para.
 export function previewVoice(buffer, id, onEnd) {
   const ctx = new Ctx()
-  const src = new AudioBufferSourceNode(ctx, { buffer })
-  build(ctx, src, id, ctx.currentTime).connect(ctx.destination)
+  const src = sourceFor(ctx, buffer, id)
+  const dur = spokenLength(buffer, id)
+  build(ctx, src, id, ctx.currentTime, dur).connect(ctx.destination)
   let done = false
   const stop = () => {
     if (done) return
@@ -175,19 +312,21 @@ export function previewVoice(buffer, id, onEnd) {
     ctx.close?.()
     onEnd?.()
   }
-  const timer = setTimeout(stop, (buffer.duration + tailFor(id)) * 1000 + 300)
+  const timer = setTimeout(stop, (dur + tailFor(id)) * 1000 + 300)
   src.start()
   return stop
 }
 
-// Gera o áudio novo (WAV, toca em todos os celulares).
+// Gera o áudio novo (WAV, toca em todos os celulares). Devolve { blob, duration }.
 export async function renderVoice(buffer, id) {
-  const length = Math.ceil((buffer.duration + tailFor(id)) * RATE)
+  const dur = spokenLength(buffer, id)
+  const length = Math.ceil((dur + tailFor(id)) * RATE)
   const ctx = new OfflineAudioContext(1, length, RATE)
-  const src = new AudioBufferSourceNode(ctx, { buffer })
-  build(ctx, src, id, 0).connect(ctx.destination)
+  const src = sourceFor(ctx, buffer, id)
+  build(ctx, src, id, 0, dur).connect(ctx.destination)
   src.start(0)
-  return toWav(await ctx.startRendering())
+  const rendered = await ctx.startRendering()
+  return { blob: toWav(rendered), duration: Math.max(1, Math.round(rendered.duration)) }
 }
 
 function toWav(buffer) {
@@ -305,9 +444,9 @@ export function openVoicePanel(panel, rec, { onSend, onClose, toast }) {
     try {
       await decoding
       if (!buffer) throw new Error('decode')
-      const wav = await renderVoice(buffer, chosen)
+      const { blob, duration } = await renderVoice(buffer, chosen)
       if (closed) return
-      onSend(new File([wav], `audio-${stamp}-${voice.id}.wav`, { type: 'audio/wav' }))
+      onSend(new File([blob], `audio-${stamp}-${voice.id}.wav`, { type: 'audio/wav' }), duration)
       close()
     } catch {
       send.disabled = false

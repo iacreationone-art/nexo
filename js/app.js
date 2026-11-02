@@ -1836,7 +1836,7 @@ function showVoices(recording, conv) {
   $('send-form').classList.add('voicing')
   closeVoices = openVoicePanel($('voice-panel'), recording, {
     toast,
-    onSend: (file) => state.current === conv && sendAttachment(file, { duration: recording.duration }),
+    onSend: (file, duration) => state.current === conv && sendAttachment(file, { duration: duration || recording.duration }),
     onClose: () => {
       closeVoices = null
       $('send-form').classList.remove('voicing')

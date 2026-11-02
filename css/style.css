@@ -661,7 +661,14 @@ body.in-chat .chat { display: flex; }
 .voice-panel[hidden] { display: none; }
 .voice-title { margin: 0 0 8px; display: flex; align-items: baseline; gap: 8px; }
 .voice-title small { color: var(--muted); }
-.voice-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.voice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+  max-height: 222px; /* 3 fileiras e meia: a do meio cortada mostra que dá para rolar */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .voice-chip {
   display: flex;
   flex-direction: column;
