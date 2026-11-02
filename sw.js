@@ -1,6 +1,6 @@
 // Service worker do Nexo: permite instalar o site como app e abrir a tela mesmo sem internet.
 // Ao mudar arquivos do app, aumente a versão: o celular baixa tudo de novo de uma vez.
-const CACHE = 'nexo-v31'
+const CACHE = 'nexo-v32'
 const SHELL = [
   './',
   'index.html',
@@ -12,6 +12,7 @@ const SHELL = [
   'js/emoji-dados.js',
   'js/figurinhas.js',
   'js/salvas.js',
+  'js/vozes.js',
   'manifest.json',
   'icons/icon.svg',
   'icons/icon-192.png',

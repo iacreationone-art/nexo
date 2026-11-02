@@ -638,6 +638,50 @@ body.in-chat .chat { display: flex; }
 @keyframes rec-blink { 50% { opacity: .2; } }
 .rec-time { font-variant-numeric: tabular-nums; font-weight: 600; }
 .rec-hint { flex: 1; color: var(--muted); font-size: .9rem; }
+.rec-voice {
+  flex: none;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: .45rem .8rem;
+  font-size: .9rem;
+  font-weight: 600;
+}
+.rec-voice[hidden] { display: none; }
+
+/* "Escolha a voz": depois de gravar, no lugar da caixa de mensagem */
+.composer.voicing { display: none; }
+.voice-panel {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  animation: emoji-panel-in .18s ease-out;
+}
+.voice-panel[hidden] { display: none; }
+.voice-title { margin: 0 0 8px; display: flex; align-items: baseline; gap: 8px; }
+.voice-title small { color: var(--muted); }
+.voice-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.voice-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 2px;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  background: var(--surface-2);
+  font-size: .75rem;
+  line-height: 1.15;
+}
+.voice-icon { font-size: 1.7rem; line-height: 1.2; transition: transform .15s; }
+.voice-chip[aria-checked="true"] { border-color: var(--primary); }
+.voice-chip.playing .voice-icon { animation: voice-talk .35s ease-in-out infinite alternate; }
+@keyframes voice-talk { to { transform: scale(1.18) rotate(-6deg); } }
+.voice-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.voice-len { flex: 1; text-align: center; color: var(--muted); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.voice-discard { background: var(--surface-2); color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .voice-chip.playing .voice-icon { animation: none; } }
 
 /* Mensagem de áudio */
 .msg-audio { display: flex; align-items: center; gap: 8px; width: 240px; max-width: 100%; padding: 2px 0; }

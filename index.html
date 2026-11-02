@@ -23,6 +23,7 @@
   <link rel="modulepreload" href="js/cripto.js">
   <link rel="modulepreload" href="js/emoji.js">
   <link rel="modulepreload" href="js/emoji-dados.js">
+  <link rel="modulepreload" href="js/vozes.js">
   <link rel="modulepreload" href="js/figurinhas.js">
   <link rel="modulepreload" href="js/salvas.js">
   <!-- Biblioteca do Supabase num arquivo só. "integrity" garante que é exatamente este arquivo:
@@ -163,6 +164,7 @@
         <div id="messages" class="messages"></div>
 
         <div id="emoji-panel" class="emoji-panel" hidden></div>
+        <div id="voice-panel" class="voice-panel" hidden></div>
 
         <form id="send-form" class="composer">
           <label class="attach-btn" title="Enviar foto ou arquivo" aria-label="Enviar foto ou arquivo">
@@ -188,6 +190,7 @@
             <span class="rec-dot" aria-hidden="true"></span>
             <span id="rec-time" class="rec-time">0:00</span>
             <span class="rec-hint">Gravando…</span>
+            <button type="button" id="rec-voice" class="rec-voice" title="Mudar a voz" aria-label="Mudar a voz antes de enviar">🎭 Voz</button>
             <button type="button" id="rec-send" class="send-btn" title="Enviar áudio" aria-label="Enviar áudio">
               <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6l-.1 6.5L15 12 3.3 13.9z"/></svg>
             </button>

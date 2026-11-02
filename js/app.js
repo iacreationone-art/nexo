@@ -3,6 +3,7 @@ import * as cripto from './cripto.js'
 import { emojiOnly, motionFor, emojiRain, setupEmojiPicker } from './emoji.js'
 import { stickerOf, stickerText, stickerSvg, stickerRain } from './figurinhas.js'
 import { listSaved, addSaved, removeSaved, getSaved, cutAnimClass, validAnim } from './salvas.js'
+import { voicesSupported, openVoicePanel } from './vozes.js'
 
 const $ = (id) => document.getElementById(id)
 
@@ -44,6 +45,7 @@ const sendKeys = new Map()  // id da conversa -> { keyId, key } usada para envia
 let tmpSeq = 0
 let listTimer = null
 let rec = null // gravação de áudio em andamento
+let closeVoices = null // fecha o "Escolha a voz" (js/vozes.js), quando aberto
 let listLoaded = false // já veio a lista do servidor (a guardada não pode mais sobrescrever)
 
 const MSG_COLS = 'id, conversation_id, sender_id, body, ciphertext, key_id, created_at, read_at, deleted_at, attachment_path, attachment_name, attachment_type, attachment_size'
@@ -825,6 +827,7 @@ async function openConversation(c) {
 
 function closeConversation(resetView = true) {
   stopRecording(true) // saiu no meio de uma gravação: joga fora e desliga o microfone
+  closeVoices?.() // e fecha o "Escolha a voz", se estiver aberto
   if (state.typingChannel) supabase.removeChannel(state.typingChannel)
   state.typingChannel = null
   state.current = null
@@ -1799,12 +1802,13 @@ async function startRecording() {
   }, 250)
 }
 
-// cancel: true joga fora; false envia.
-function stopRecording(cancel) {
+// cancel: true joga fora; false envia. voice: true abre o "Escolha a voz" antes de enviar.
+function stopRecording(cancel, voice = false) {
   if (!rec) return
   const r = rec
   rec = null
   r.cancelled = cancel
+  r.voice = voice
   r.duration = Math.round((Date.now() - r.start) / 1000)
   clearInterval(r.timer)
   if (r.recorder.state !== 'inactive') r.recorder.stop()
@@ -1818,9 +1822,30 @@ function finishRecording(r) {
   if (state.current !== r.conv) return
   const type = (r.recorder.mimeType || r.chunks[0].type || 'audio/webm').split(';')[0]
   const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm'
+  const blob = new Blob(r.chunks, { type })
+  if (r.voice) return showVoices({ blob, ext, duration: r.duration }, r.conv)
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-  sendAttachment(new File(r.chunks, `audio-${stamp}.${ext}`, { type }), { duration: r.duration })
+  sendAttachment(new File([blob], `audio-${stamp}.${ext}`, { type }), { duration: r.duration })
 }
+
+// ---------- Vozes engraçadas (js/vozes.js) ----------
+
+
+function showVoices(recording, conv) {
+  emojiPicker.close()
+  $('send-form').classList.add('voicing')
+  closeVoices = openVoicePanel($('voice-panel'), recording, {
+    toast,
+    onSend: (file) => state.current === conv && sendAttachment(file, { duration: recording.duration }),
+    onClose: () => {
+      closeVoices = null
+      $('send-form').classList.remove('voicing')
+    },
+  })
+}
+
+if (!voicesSupported) $('rec-voice').hidden = true
+$('rec-voice').addEventListener('click', () => stopRecording(false, true))
 
 $('mic-btn').addEventListener('click', startRecording)
 $('rec-cancel').addEventListener('click', () => stopRecording(true))
