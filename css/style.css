@@ -917,6 +917,7 @@ dialog.viewer[open] { display: flex; align-items: center; justify-content: cente
 .emoji-btn.active { color: var(--primary); background: var(--surface-2); }
 
 .emoji-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 270px;
@@ -925,9 +926,18 @@ dialog.viewer[open] { display: flex; align-items: center; justify-content: cente
   animation: emoji-panel-in .18s ease-out;
 }
 @keyframes emoji-panel-in { from { transform: translateY(14px); opacity: 0; } }
-.emoji-tabs { display: flex; gap: 2px; padding: 6px 8px 4px; border-bottom: 1px solid var(--border); }
+.emoji-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px 4px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.emoji-tabs::-webkit-scrollbar { display: none; }
 .emoji-tab {
-  flex: 1;
+  flex: 1 0 40px;
   border: 0;
   background: none;
   font-size: 1.35rem;
@@ -957,6 +967,23 @@ dialog.viewer[open] { display: flex; align-items: center; justify-content: cente
   transition: transform .12s;
 }
 .emoji-cell:hover { background: var(--surface-2); transform: scale(1.18); }
+.emoji-cell.toneable { -webkit-touch-callout: none; user-select: none; }
+
+/* Segurar um emoji de pessoa/mão: os 6 tons de pele */
+.tone-pop {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+}
+.tone-pop[hidden] { display: none; }
+.tone-opt { border: 0; background: none; font-size: 1.75rem; width: 44px; height: 44px; border-radius: 10px; }
+.tone-opt[aria-pressed="true"], .tone-opt:hover { background: var(--surface-2); }
 .emoji-cell:active { transform: scale(.85); }
 .emoji-cell.pop { animation: em-pop .35s cubic-bezier(.3, 1.8, .5, 1); }
 .emoji-empty { grid-column: 1 / -1; text-align: center; color: var(--muted); font-size: .9rem; margin-top: 40px; }

@@ -3,18 +3,70 @@
 
 import { STICKER_NAMES, stickerSvg, stickerLabel } from './figurinhas.js'
 import { CUT_ANIMS, cutAnimClass, loadAnim, saveAnim } from './salvas.js'
+import { GRUPOS, TONAVEIS, NOVOS } from './emoji-dados.js'
 
+// Todos os emojis do teclado do celular, nas mesmas categorias.
 const CATEGORIES = [
   { icon: '🕘', name: 'Recentes', list: [] },
-  { icon: '😀', name: 'Carinhas', list: '😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🫠 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 😮‍💨 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🥵 🥶 🥴 😵‍💫 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 🙁 😮 😯 😲 😳 🥺 🥹 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 💩 🤡 👻 👽 🤖 😺 😹 😻' },
-  { icon: '👋', name: 'Gestos', list: '👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 ✍️ 💪 🫡 🫢 🫣 🙈 🙉 🙊 👀 🧠 💃 🕺 🙋 🤷 🤦 🙆 🙅' },
-  { icon: '❤️', name: 'Corações', list: '❤️ 🧡 💛 💚 💙 🩵 💜 🖤 🤍 🤎 💔 ❤️‍🔥 ❤️‍🩹 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 💋 💌 💯 💢 💥 💫 💦 💨 💬 💭 💤' },
-  { icon: '🐶', name: 'Natureza', list: '🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🐤 🦆 🦅 🦉 🦇 🐺 🐴 🦄 🐝 🦋 🐌 🐞 🐢 🐍 🦖 🐙 🦀 🐠 🐬 🐳 🦈 🐊 🦒 🐘 🌸 🌹 🌻 🌷 🌵 🌴 🍀 🌈 ⭐ 🌟 🌙 ☀️ ⛅ 🌧️ ⚡ 🔥 ❄️ ☃️ 🌊' },
-  { icon: '🍕', name: 'Comida', list: '🍎 🍌 🍉 🍇 🍓 🍒 🍑 🥭 🍍 🥥 🥑 🍅 🌽 🥕 🍞 🧀 🥚 🍳 🥓 🍔 🍟 🍕 🌭 🌮 🌯 🍝 🍜 🍣 🍤 🍦 🍩 🍪 🎂 🍰 🧁 🍫 🍬 🍿 ☕ 🍵 🧃 🥤 🍺 🍻 🥂 🍷 🍹' },
-  { icon: '🎉', name: 'Festa', list: '🎉 🎊 🥳 🎈 🎁 🎂 🎄 🎃 ✨ 🎆 🎇 🏆 🥇 ⚽ 🏀 🏐 🎾 🎮 🎲 🎯 🎸 🎤 🎧 🎬 🚀 ✈️ 🚗 🏖️ 🏝️ ⛰️ 🏠 💡 📱 💻 📷 ⏰ 💰 💸 📌 ✅ ❌ ⚠️ ❓ ❗ 🆗 🆒 🆕 🇧🇷' },
+  { icon: '😀', name: 'Carinhas e emoções', list: GRUPOS.carinhas },
+  { icon: '👋', name: 'Pessoas e gestos', list: GRUPOS.pessoas },
+  { icon: '🐶', name: 'Animais e natureza', list: GRUPOS.natureza },
+  { icon: '🍕', name: 'Comidas e bebidas', list: GRUPOS.comida },
+  { icon: '✈️', name: 'Viagens e lugares', list: GRUPOS.viagens },
+  { icon: '⚽', name: 'Atividades', list: GRUPOS.atividades },
+  { icon: '💡', name: 'Objetos', list: GRUPOS.objetos },
+  { icon: '🔣', name: 'Símbolos', list: GRUPOS.simbolos },
+  { icon: '🏳️', name: 'Bandeiras', list: GRUPOS.bandeiras },
   { icon: 'bolota-oi', name: 'Figurinhas', stickers: true, list: STICKER_NAMES },
 ]
 for (const c of CATEGORIES) if (typeof c.list === 'string') c.list = c.list.split(' ')
+
+// ---------- Tons de pele ----------
+
+const TONES = ['', '\u{1F3FB}', '\u{1F3FC}', '\u{1F3FD}', '\u{1F3FE}', '\u{1F3FF}']
+const TONEABLE = new Set(TONAVEIS.split(' '))
+const TONE_KEY = 'nexo-emoji-tom'
+
+// Põe o tom logo depois do primeiro caractere (tirando o "️" que vem ali, se houver).
+function withTone(emoji, tone) {
+  if (!tone || !TONEABLE.has(emoji)) return emoji
+  const [first, ...rest] = Array.from(emoji)
+  if (rest[0] === '️') rest.shift()
+  return first + tone + rest.join('')
+}
+
+// ---------- Emojis novos que o aparelho ainda não desenha ----------
+// Celular antigo mostra um quadradinho (ou dois emojis lado a lado) no lugar do emoji novo.
+// Conferimos uma vez, desenhando num canvas, e escondemos os que não funcionam.
+
+let missing = null
+function findMissing() {
+  if (missing) return missing
+  missing = new Set()
+  try {
+    const size = 32
+    const c = document.createElement('canvas')
+    c.width = c.height = size * 2
+    const ctx = c.getContext('2d', { willReadFrequently: true })
+    ctx.font = size + 'px sans-serif'
+    ctx.textBaseline = 'top'
+    const ref = ctx.measureText('😀').width
+    for (const e of NOVOS.split(' ')) {
+      if (ctx.measureText(e).width > ref * 1.4) { missing.add(e); continue } // virou dois desenhos
+      ctx.clearRect(0, 0, c.width, c.height)
+      // Pinta de vermelho puro: o quadradinho sai vermelho; um emoji de verdade tem suas próprias cores.
+      ctx.fillStyle = '#f00'
+      ctx.fillText(e, 0, 0)
+      const d = ctx.getImageData(0, 0, c.width, c.height).data
+      let color = false
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] > 40 && (d[i + 1] > 30 || d[i + 2] > 30)) { color = true; break }
+      }
+      if (!color) missing.add(e)
+    }
+  } catch {}
+  return missing
+}
 
 // ---------- Mensagem só de emojis (até 3) ----------
 
@@ -116,6 +168,9 @@ CATEGORIES.push(SAVED)
 // saved: { load() → [{ id, blob, name, cutout }], pick(id, anim), remove(id), add(), paste() }
 export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
   CATEGORIES[0].list = loadRecent()
+  let tone = ''
+  try { tone = localStorage.getItem(TONE_KEY) || '' } catch {}
+  if (!TONES.includes(tone)) tone = ''
   let savedUrls = []
   let savedTurn = 0
   let anim = loadAnim() // animação escolhida para os recortes
@@ -218,11 +273,18 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       p.textContent = 'Os emojis que você usar aparecem aqui.'
       grid.append(p)
     }
+    const hide = stickers ? null : findMissing()
     for (const emoji of list) {
+      if (hide?.has(emoji)) continue
       const b = document.createElement('button')
       b.type = 'button'
       b.className = 'emoji-cell'
-      if (stickers) {
+      if (!stickers && TONEABLE.has(emoji)) {
+        // Segurar o dedo abre os tons de pele.
+        b.dataset.base = emoji
+        b.classList.add('toneable')
+        b.textContent = withTone(emoji, tone)
+      } else if (stickers) {
         // Figurinha: toca e já envia.
         b.classList.add('sticker-cell')
         b.dataset.fig = emoji
@@ -247,7 +309,87 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
     tabs.append(b)
   })
 
+  // ---------- Segurar um emoji: escolher o tom de pele ----------
+  const tonePop = document.createElement('div')
+  tonePop.className = 'tone-pop'
+  tonePop.hidden = true
+  tonePop.setAttribute('role', 'menu')
+  tonePop.setAttribute('aria-label', 'Tom de pele')
+  panel.append(tonePop)
+  let pressTimer = 0
+  let pressStart = null
+  let skipClick = false
+
+  function closeTones() {
+    tonePop.hidden = true
+  }
+
+  function openTones(cell) {
+    const base = cell.dataset.base
+    tonePop.replaceChildren(
+      ...TONES.map((t) => {
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.className = 'tone-opt'
+        b.dataset.tone = t
+        b.setAttribute('role', 'menuitem')
+        b.setAttribute('aria-pressed', String(t === tone))
+        b.textContent = withTone(base, t)
+        return b
+      })
+    )
+    tonePop.hidden = false
+    const p = panel.getBoundingClientRect()
+    const c = cell.getBoundingClientRect()
+    const w = tonePop.offsetWidth
+    const left = Math.min(Math.max(c.left + c.width / 2 - w / 2 - p.left, 4), p.width - w - 4)
+    tonePop.style.left = left + 'px'
+    tonePop.style.top = Math.max(c.top - p.top - tonePop.offsetHeight - 4, 4) + 'px'
+    navigator.vibrate?.(15)
+  }
+
+  tonePop.addEventListener('click', (e) => {
+    const opt = e.target.closest('.tone-opt')
+    if (!opt) return
+    tone = opt.dataset.tone
+    try { localStorage.setItem(TONE_KEY, tone) } catch {}
+    insert(opt.textContent)
+    closeTones()
+    showCategory(current) // a categoria passa a mostrar o tom escolhido
+  })
+
+  grid.addEventListener('pointerdown', (e) => {
+    closeTones()
+    skipClick = false
+    const cell = e.target.closest('.emoji-cell.toneable')
+    if (!cell) return
+    pressStart = [e.clientX, e.clientY]
+    clearTimeout(pressTimer)
+    pressTimer = setTimeout(() => {
+      skipClick = true
+      openTones(cell)
+    }, 420)
+  })
+  grid.addEventListener('pointermove', (e) => {
+    if (pressStart && Math.hypot(e.clientX - pressStart[0], e.clientY - pressStart[1]) > 10) clearTimeout(pressTimer)
+  })
+  for (const ev of ['pointerup', 'pointercancel', 'scroll']) grid.addEventListener(ev, () => clearTimeout(pressTimer))
+  grid.addEventListener('scroll', closeTones)
+  grid.addEventListener('contextmenu', (e) => e.target.closest('.emoji-cell') && e.preventDefault())
+
+  function insert(emoji) {
+    const start = input.selectionStart ?? input.value.length
+    const end = input.selectionEnd ?? start
+    input.setRangeText(emoji, start, end, 'end')
+    input.dispatchEvent(new Event('input')) // ajusta a altura e avisa "digitando…"
+    saveRecent(emoji)
+  }
+
   grid.addEventListener('click', (e) => {
+    if (skipClick) {
+      skipClick = false // foi um "segurar", não um toque
+      return
+    }
     const chip = e.target.closest('.anim-chip')
     if (chip) {
       anim = chip.dataset.anim
@@ -278,20 +420,16 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       onSticker?.(cell.dataset.fig)
       return
     }
-    const emoji = cell.textContent
-    const start = input.selectionStart ?? input.value.length
-    const end = input.selectionEnd ?? start
-    input.setRangeText(emoji, start, end, 'end')
-    input.dispatchEvent(new Event('input')) // ajusta a altura e avisa "digitando…"
+    insert(cell.textContent)
     cell.classList.remove('pop')
     void cell.offsetWidth // reinicia a animação
     cell.classList.add('pop')
-    saveRecent(emoji)
     if (current === 0) showCategory(0)
   })
 
   function toggle(open) {
     panel.hidden = !open
+    closeTones()
     button.setAttribute('aria-expanded', String(open))
     button.classList.toggle('active', open)
     if (open) {
