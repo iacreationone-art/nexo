@@ -1516,7 +1516,7 @@ async function forwardTo(m, c, row) {
 async function cutoutRain(m) {
   try {
     const url = await fileUrl(m)
-    if (state.current?.conversation_id === m.conversation_id) imageRain($('chat-view'), url)
+    if (state.current?.conversation_id === m.conversation_id) imageRain($('chat-view'), url, m.stickerAnim)
   } catch {}
 }
 
@@ -1745,7 +1745,7 @@ async function sendAttachment(original, { sticker = false, anim = '', duration =
     pending: true,
   }
   addMessage(tmp, true)
-  if (rain) imageRain($('chat-view'), tmp.localUrl)
+  if (rain) imageRain($('chat-view'), tmp.localUrl, stickerAnim)
 
   // O arquivo e o nome dele vão cifrados; o caminho no Storage não tem o nome.
   const path = `${conv.conversation_id}/${crypto.randomUUID()}`

@@ -144,7 +144,8 @@ export function emojiRain(container, list) {
 }
 
 // Chuva de recortes: o mesmo efeito, com cópias da imagem (url local, blob:) no lugar dos emojis.
-export function imageRain(container, url) {
+// anim: cada cópia também faz a animação do recorte (girando, pulando…) enquanto sobe.
+export function imageRain(container, url, anim = '') {
   if (!url || reducedMotion.matches) return
   const layer = document.createElement('div')
   layer.className = 'emoji-rain'
@@ -154,6 +155,10 @@ export function imageRain(container, url) {
     const img = document.createElement('img')
     img.src = url
     img.alt = ''
+    if (anim) {
+      img.className = cutAnimClass(anim)
+      img.style.animationDelay = -Math.random() * 2 + 's' // cada uma num ponto diferente do movimento
+    }
     s.append(img)
     s.style.left = Math.random() * 92 + '%'
     s.style.width = 34 + Math.random() * 40 + 'px'
