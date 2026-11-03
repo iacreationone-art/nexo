@@ -2,7 +2,7 @@
 // e "chuva" de emojis. Tudo local (sem baixar imagens de fora), então nada vaza da criptografia.
 
 import { STICKER_NAMES, stickerSvg, stickerLabel } from './figurinhas.js'
-import { CUT_ANIMS, cutAnimClass, loadAnim, saveAnim } from './salvas.js'
+import { CUT_ANIMS, cutAnimClass, loadAnim, saveAnim, loadRain, saveRain } from './salvas.js'
 import { GRUPOS, TONAVEIS, NOVOS } from './emoji-dados.js'
 
 // Todos os emojis do teclado do celular, nas mesmas categorias.
@@ -143,6 +143,30 @@ export function emojiRain(container, list) {
   setTimeout(() => layer.remove(), 4000)
 }
 
+// Chuva de recortes: o mesmo efeito, com cópias da imagem (url local, blob:) no lugar dos emojis.
+export function imageRain(container, url) {
+  if (!url || reducedMotion.matches) return
+  const layer = document.createElement('div')
+  layer.className = 'emoji-rain'
+  layer.setAttribute('aria-hidden', 'true')
+  for (let i = 0; i < 22; i++) {
+    const s = document.createElement('span')
+    const img = document.createElement('img')
+    img.src = url
+    img.alt = ''
+    s.append(img)
+    s.style.left = Math.random() * 92 + '%'
+    s.style.width = 34 + Math.random() * 40 + 'px'
+    s.style.animationDelay = Math.random() * 0.9 + 's'
+    s.style.animationDuration = 2 + Math.random() * 1.4 + 's'
+    s.style.setProperty('--sway', (Math.random() * 80 - 40).toFixed(0) + 'px')
+    s.style.setProperty('--turn', (Math.random() * 60 - 30).toFixed(0) + 'deg')
+    layer.append(s)
+  }
+  container.append(layer)
+  setTimeout(() => layer.remove(), 4000)
+}
+
 // ---------- Painel para escolher ----------
 
 const RECENT_KEY = 'nexo-emoji-recentes'
@@ -165,7 +189,7 @@ function saveRecent(emoji) {
 const SAVED = { icon: '⭐', name: 'Salvas', saved: true, list: [] }
 CATEGORIES.push(SAVED)
 
-// saved: { load() → [{ id, blob, name, cutout }], pick(id, anim), remove(id), add(), paste() }
+// saved: { load() → [{ id, blob, name, cutout }], pick(id, anim, rain), remove(id), add(), paste() }
 export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
   CATEGORIES[0].list = loadRecent()
   let tone = ''
@@ -174,6 +198,7 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
   let savedUrls = []
   let savedTurn = 0
   let anim = loadAnim() // animação escolhida para os recortes
+  let rain = loadRain() // e se eles também chovem na tela
 
   // Fileira "Animação: Parado · Pulando · …". Trocar muda na hora os recortes do painel.
   function animRow() {
@@ -192,11 +217,21 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       chip.setAttribute('aria-checked', String(value === anim))
       row.append(chip)
     }
+    // Liga/desliga (vale junto com qualquer animação acima).
+    row.append(Object.assign(document.createElement('small'), { textContent: 'Efeito na tela:' }))
+    const rainChip = document.createElement('button')
+    rainChip.type = 'button'
+    rainChip.className = 'anim-chip rain-chip'
+    rainChip.dataset.rain = '1'
+    rainChip.textContent = '🌧️ Chuva de recortes'
+    rainChip.setAttribute('role', 'switch')
+    rainChip.setAttribute('aria-checked', String(rain))
+    row.append(rainChip)
     return row
   }
 
   function applyAnim() {
-    grid.querySelectorAll('.anim-chip').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.anim === anim)))
+    grid.querySelectorAll('.anim-chip:not(.rain-chip)').forEach((c) => c.setAttribute('aria-checked', String(c.dataset.anim === anim)))
     // Recortes com animação própria (salvos de uma mensagem) não mudam.
     grid.querySelectorAll('.saved-cell.cutout:not([data-own-anim]) img').forEach((img) => (img.className = cutAnimClass(anim)))
   }
@@ -390,6 +425,13 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       skipClick = false // foi um "segurar", não um toque
       return
     }
+    const rainChip = e.target.closest('.rain-chip')
+    if (rainChip) {
+      rain = !rain
+      saveRain(rain)
+      rainChip.setAttribute('aria-checked', String(rain))
+      return
+    }
     const chip = e.target.closest('.anim-chip')
     if (chip) {
       anim = chip.dataset.anim
@@ -410,7 +452,7 @@ export function setupEmojiPicker({ input, button, panel, onSticker, saved }) {
       cell.classList.remove('pop')
       void cell.offsetWidth // reinicia a animação
       cell.classList.add('pop')
-      saved.pick(cell.dataset.saved, cell.dataset.ownAnim || anim)
+      saved.pick(cell.dataset.saved, cell.dataset.ownAnim || anim, rain)
       return
     }
     if (cell.dataset.fig) {

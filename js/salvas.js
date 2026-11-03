@@ -27,6 +27,19 @@ export function saveAnim(a) {
   try { localStorage.setItem(ANIM_KEY, a) } catch {}
 }
 
+// "Chuva de recortes": além do recorte, enche a tela com cópias dele subindo (como o ❤️).
+const RAIN_KEY = 'nexo-chuva-recorte'
+export function loadRain() {
+  try {
+    return localStorage.getItem(RAIN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+export function saveRain(on) {
+  try { localStorage.setItem(RAIN_KEY, on ? '1' : '0') } catch {}
+}
+
 const DB = 'nexo-salvas'
 const STORE = 'imagens'
 export const MAX_SAVED = 80

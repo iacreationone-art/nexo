@@ -1264,3 +1264,5 @@ dialog.viewer[open] { display: flex; align-items: center; justify-content: cente
   .big-emoji, .msg.fresh .big-emoji, .emoji-panel, .emoji-cell.pop { animation: none; }
   .fig *, .msg.fresh .sticker-art, .cut-anim { animation: none !important; }
 }
+/* Chuva de recortes (cópias da imagem subindo pela tela) */
+.emoji-rain img { display: block; width: 100%; height: auto; }

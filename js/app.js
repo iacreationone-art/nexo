@@ -1,6 +1,6 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY, VAPID_PUBLIC_KEY } from './config.js'
 import * as cripto from './cripto.js'
-import { emojiOnly, motionFor, emojiRain, setupEmojiPicker } from './emoji.js'
+import { emojiOnly, motionFor, emojiRain, imageRain, setupEmojiPicker } from './emoji.js'
 import { stickerOf, stickerText, stickerSvg, stickerRain } from './figurinhas.js'
 import { listSaved, addSaved, removeSaved, getSaved, cutAnimClass, validAnim } from './salvas.js'
 import { voicesSupported, openVoicePanel } from './vozes.js'
@@ -459,6 +459,7 @@ async function openMessage(m) {
     m.sticker = !!p.f // imagem recortada: aparece sem balão, como figurinha
     m.stickerAnim = p.f ? validAnim(p.a) : '' // e pode vir com animação (pulando, girando…)
     m.duration = p.d || 0 // áudio: duração em segundos
+    m.rain = !!(p.f && p.r) // recorte com chuva de cópias na tela
     m.locked = false
   } catch {
     m.locked = true
@@ -566,7 +567,10 @@ async function onInsert(m) {
 
   if (isOpen) await openMessage(m)
   if (isOpen && state.current?.conversation_id === m.conversation_id) {
-    if (!mine && !state.msgs.some((x) => x.id === m.id)) emojiRain($('chat-view'), emojiOnly(m.body) || stickerRain(m.body))
+    if (!mine && !state.msgs.some((x) => x.id === m.id)) {
+      emojiRain($('chat-view'), emojiOnly(m.body) || stickerRain(m.body))
+      if (m.rain && !m.locked) cutoutRain(m)
+    }
     addMessage(m)
     if (!mine && document.visibilityState === 'visible') await markRead()
   }
@@ -1505,7 +1509,15 @@ async function forwardTo(m, c, row) {
   $('forward-dialog').close()
   $('viewer').close()
   await openConversation(c)
-  if (state.current === c) await sendAttachment(file, { sticker: !!m.sticker, anim: m.stickerAnim })
+  if (state.current === c) await sendAttachment(file, { sticker: !!m.sticker, anim: m.stickerAnim, rain: !!m.rain })
+}
+
+// Chegou um recorte com chuva: abre a imagem (cifrada) e faz chover cópias dela.
+async function cutoutRain(m) {
+  try {
+    const url = await fileUrl(m)
+    if (state.current?.conversation_id === m.conversation_id) imageRain($('chat-view'), url)
+  } catch {}
 }
 
 // ---------- Menu da mensagem (tocar e segurar, ou clique direito) ----------
@@ -1705,8 +1717,10 @@ async function shrinkImage(file, max = 1600) {
 
 // sticker: imagem recortada que vai como figurinha (sem balão); anim: como ela se mexe.
 // duration: áudio gravado (segundos), vai junto para mostrar o tempo antes de tocar.
-async function sendAttachment(original, { sticker = false, anim = '', duration = 0 } = {}) {
+// rain: recorte que também faz chover cópias dele na tela (de quem envia e de quem recebe).
+async function sendAttachment(original, { sticker = false, anim = '', duration = 0, rain = false } = {}) {
   const stickerAnim = sticker ? validAnim(anim) : ''
+  rain = sticker && rain
   const conv = state.current
   if (!conv) return
   const file = await shrinkImage(original)
@@ -1727,9 +1741,11 @@ async function sendAttachment(original, { sticker = false, anim = '', duration =
     sticker,
     stickerAnim,
     duration,
+    rain,
     pending: true,
   }
   addMessage(tmp, true)
+  if (rain) imageRain($('chat-view'), tmp.localUrl)
 
   // O arquivo e o nome dele vão cifrados; o caminho no Storage não tem o nome.
   const path = `${conv.conversation_id}/${crypto.randomUUID()}`
@@ -1751,6 +1767,7 @@ async function sendAttachment(original, { sticker = false, anim = '', duration =
           y: type,
           ...(sticker && { f: 1 }),
           ...(stickerAnim && { a: stickerAnim }),
+          ...(rain && { r: 1 }),
           ...(duration && { d: duration }),
         }),
         attachment_path: path,
@@ -1776,6 +1793,7 @@ async function sendAttachment(original, { sticker = false, anim = '', duration =
   data.attachment_name = original.name
   data.sticker = sticker
   data.stickerAnim = stickerAnim
+  data.rain = rain
   data.duration = duration
   addMessage(data)
   scheduleListRefresh()
@@ -1800,9 +1818,9 @@ const emojiPicker = setupEmojiPicker({
     remove: removeSaved,
     add: () => $('saved-input').click(),
     paste: pasteFromClipboard,
-    pick: async (id, anim) => {
+    pick: async (id, anim, rain) => {
       const item = await getSaved(id).catch(() => null)
-      if (item) sendAttachment(new File([item.blob], item.name, { type: item.type }), { sticker: !!item.cutout, anim })
+      if (item) sendAttachment(new File([item.blob], item.name, { type: item.type }), { sticker: !!item.cutout, anim, rain })
     },
   },
 })
