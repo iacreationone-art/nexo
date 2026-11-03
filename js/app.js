@@ -581,6 +581,7 @@ function onUpdate(m) {
     } else if (existing) {
       existing.read_at = m.read_at // fora isso, só o "lida" muda depois de enviada: troca só o ✓
       $('messages').querySelector(`[data-id="${m.id}"] .msg-meta`)?.replaceWith(metaNode(existing))
+      saveHistory()
     }
   }
   scheduleListRefresh()
@@ -604,6 +605,7 @@ async function loadConversations(include) {
   renderConversations()
   // Guarda no aparelho (junto das chaves; sai ao sair da conta) para abrir rápido da próxima vez.
   cripto.localSet('lista', { userId: state.user.id, rows: data }).catch(() => {})
+  prefetchHistories()
 }
 
 async function showSavedConversations() {
@@ -748,6 +750,8 @@ async function hideConversation(id) {
     else closeConversation()
   }
   state.conversations = state.conversations.filter((c) => c.conversation_id !== id)
+  clearTimeout(histTimer)
+  writeHistory(id, []) // as mensagens guardadas no aparelho também somem
   toast('Conversa apagada.', {
     label: 'Desfazer',
     run: async () => {
@@ -766,6 +770,81 @@ function normalize(text) {
 
 $('search-input').addEventListener('input', renderConversations)
 
+// ---------- Mensagens guardadas no aparelho ----------
+// Cada conversa guarda as últimas 200 mensagens no IndexedDB (junto das chaves; sai ao sair da conta).
+// Ficam cifradas, iguais às do servidor: o texto só é aberto na hora de mostrar, com a chave do aparelho.
+
+const HIST_MAX = 200
+const MSG_KEYS = MSG_COLS.split(',').map((k) => k.trim())
+const histKey = (convId) => 'msgs:' + convId
+
+function fetchMessages(convId) {
+  return supabase
+    .from('messages')
+    .select(MSG_COLS)
+    .eq('conversation_id', convId)
+    .order('created_at', { ascending: false })
+    .limit(HIST_MAX)
+}
+
+// Só as colunas do servidor; o que foi aberto (texto, nome do arquivo) volta a ficar só cifrado.
+function rawMsg(m) {
+  const r = {}
+  for (const k of MSG_KEYS) r[k] = m[k] ?? null
+  if (r.ciphertext) r.body = r.attachment_name = null
+  return r
+}
+
+async function readHistory(convId) {
+  const saved = await cripto.localGet(histKey(convId)).catch(() => null)
+  return saved?.userId === state.user?.id && Array.isArray(saved.rows) ? saved.rows : []
+}
+
+function writeHistory(convId, rows) {
+  return cripto.localSet(histKey(convId), { userId: state.user.id, rows }).catch(() => {})
+}
+
+// Grava a conversa aberta (um pouco depois, juntando várias mudanças seguidas).
+let histTimer = 0
+function saveHistory() {
+  const c = state.current
+  if (!c || !state.histReady) return
+  const rows = state.msgs
+    .filter((m) => !m.pending && !String(m.id).startsWith('tmp-'))
+    .slice(-HIST_MAX)
+    .map(rawMsg)
+  clearTimeout(histTimer)
+  histTimer = setTimeout(() => writeHistory(c.conversation_id, rows), 300)
+}
+
+// O que muda na tela: se for igual, não precisa redesenhar.
+const msgsSignature = (list) => list.map((m) => `${m.id}|${m.read_at || ''}|${m.deleted_at || ''}|${m.locked ? 1 : 0}`).join(',')
+
+// Depois de carregar a lista, já baixa (em segundo plano) as conversas do topo que mudaram,
+// para que abram na hora mesmo na primeira vez.
+let prefetching = false
+async function prefetchHistories() {
+  if (prefetching) return
+  prefetching = true
+  try {
+    for (const c of state.conversations.slice(0, 10)) {
+      if (c.conversation_id === state.current?.conversation_id || c.last_body == null) continue // sem mensagens
+      const rows = await readHistory(c.conversation_id)
+      const newest = rows[rows.length - 1]
+      const time = (t) => (t ? Date.parse(t) : 0)
+      // Já está em dia (mesma última mensagem e mesmo "lida").
+      if (newest && time(newest.created_at) >= time(c.last_at) && time(newest.read_at) === time(c.last_read_at)) continue
+      const { data, error } = await fetchMessages(c.conversation_id)
+      if (error) break
+      if (c.conversation_id !== state.current?.conversation_id) await writeHistory(c.conversation_id, data.reverse())
+    }
+  } catch (err) {
+    console.error('histórico', err)
+  } finally {
+    prefetching = false
+  }
+}
+
 // ---------- Conversa ----------
 
 function openById(id) {
@@ -778,6 +857,7 @@ async function openConversation(c) {
   closeConversation(false)
   state.current = c
   state.msgs = []
+  state.histReady = false // só grava no aparelho depois de ler o que já estava guardado
 
   document.body.classList.add('in-chat')
   if (!history.state?.chat) history.pushState({ chat: true }, '')
@@ -801,23 +881,34 @@ async function openConversation(c) {
 
   loadContact(c)
 
-  const { data, error } = await supabase
-    .from('messages')
-    .select(MSG_COLS)
-    .eq('conversation_id', c.conversation_id)
-    .order('created_at', { ascending: false })
-    .limit(200)
+  // 1º) Mostra na hora o que já está guardado no aparelho (sem esperar a internet).
+  const cached = await readHistory(c.conversation_id)
+  if (state.current !== c) return
+  if (cached.length) {
+    await Promise.all(cached.map(openMessage))
+    if (state.current !== c) return
+    const ids = new Set(cached.map((m) => m.id))
+    state.msgs = [...cached, ...state.msgs.filter((m) => !ids.has(m.id))]
+    renderMessages(true)
+  }
+  state.histReady = true
+
+  // 2º) Busca no servidor e atualiza (mensagens novas, lidas, apagadas).
+  const { data, error } = await fetchMessages(c.conversation_id)
   if (state.current !== c) return
   if (error) return console.error(error)
 
   await Promise.all(data.map(openMessage))
   if (state.current !== c) return
 
-  // Junta com o que pode ter chegado pelo tempo real enquanto carregava.
+  // Junta com o que chegou pelo tempo real (ou foi enviado) enquanto carregava.
   const loaded = data.reverse()
   const ids = new Set(loaded.map((m) => m.id))
-  state.msgs = [...loaded, ...state.msgs.filter((m) => !ids.has(m.id))]
-  renderMessages(true)
+  const before = msgsSignature(state.msgs)
+  state.msgs = [...loaded, ...state.msgs.filter((m) => !ids.has(m.id) && m.freshAt)]
+  // Igual ao que já estava na tela: não redesenha (não pisca nem pula a rolagem).
+  if (msgsSignature(state.msgs) !== before) renderMessages(!cached.length || isNearBottom($('messages')))
+  saveHistory()
   if (c.unread > 0) {
     await markRead()
     scheduleListRefresh()
@@ -832,6 +923,7 @@ function closeConversation(resetView = true) {
   state.typingChannel = null
   state.current = null
   state.msgs = []
+  state.histReady = false
   state.typingUntil = 0
   state.contact = null
   $('call-btn').hidden = true
@@ -923,11 +1015,13 @@ function addMessage(m, forceBottom = false) {
   if (!last || dayKey(last) !== dayKey(m)) box.append(el('div', 'day-sep', dayLabel(m.created_at)))
   box.append(messageNode(m))
   if (forceBottom || nearBottom) box.scrollTop = box.scrollHeight
+  saveHistory()
 }
 
 // Tira uma mensagem (a provisória "Enviando…") da lista e da tela.
 function removeMessage(m) {
   state.msgs = state.msgs.filter((x) => x !== m)
+  saveHistory()
   const node = $('messages').querySelector(`[data-id="${m.id}"]`)
   if (!node) return
   const before = node.previousElementSibling
@@ -956,6 +1050,7 @@ function applyDeleted(m, when) {
   })
   if (viewerMsg === m) $('viewer').close()
   $('messages').querySelector(`[data-id="${m.id}"]`)?.replaceWith(messageNode(m))
+  saveHistory()
 }
 
 function metaNode(m) {
@@ -1514,6 +1609,7 @@ $('msg-hide').addEventListener('click', async () => {
         state.msgs.push(m)
         state.msgs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
         renderMessages()
+        saveHistory()
       }
       scheduleListRefresh()
     },
