@@ -1,0 +1,1 @@
+const s="https://ngfyqbcqkecudbkdvqph.supabase.co",o="sb_publishable_7ki8Hx3QO77w0DZ2yYgJ4A_K4Ho4SUi",p="BMRTvWHMeYetzolNS2V9TPMkYn7jO5pgsXzpy6H5c6TOI9MiHJyLiZLigW0AQy55HRj6O3IhuAfuc2WmPs-2WBY";export{o as SUPABASE_ANON_KEY,s as SUPABASE_URL,p as VAPID_PUBLIC_KEY};
