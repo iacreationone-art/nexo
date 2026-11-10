@@ -152,6 +152,16 @@
           </a>
         </header>
 
+        <header id="select-bar" class="bar select-bar" hidden>
+          <button type="button" id="select-cancel" class="icon-btn" title="Cancelar seleção" aria-label="Cancelar seleção">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z"/></svg>
+          </button>
+          <h2 id="select-count" aria-live="polite">1 selecionada</h2>
+          <button type="button" id="select-delete" class="icon-btn" title="Apagar selecionadas" aria-label="Apagar selecionadas">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4zm-3 6h12l-1 12H7zm4 2v8h1.5v-8zm2.5 0v8H14v-8z"/></svg>
+          </button>
+        </header>
+
         <div id="messages" class="messages"></div>
 
         <div id="emoji-panel" class="emoji-panel" hidden></div>
@@ -359,8 +369,17 @@
       <button type="button" id="msg-gallery">📥 Salvar na galeria</button>
       <button type="button" id="msg-save">⭐ Salvar nas minhas</button>
       <button type="button" id="msg-copy">📋 Copiar texto</button>
+      <button type="button" id="msg-select">☑️ Selecionar várias</button>
       <button type="button" id="msg-hide">🗑️ Apagar para mim</button>
       <button type="button" id="msg-delete-all" class="danger">🚫 Apagar para todos</button>
+      <button type="button" class="msg-menu-cancel" data-close>Cancelar</button>
+    </div>
+  </dialog>
+
+  <dialog id="select-menu" class="msg-menu" aria-label="Apagar mensagens selecionadas">
+    <div class="msg-menu-body">
+      <button type="button" id="select-hide">🗑️ Apagar para mim</button>
+      <button type="button" id="select-delete-all" class="danger">🚫 Apagar para todos</button>
       <button type="button" class="msg-menu-cancel" data-close>Cancelar</button>
     </div>
   </dialog>
