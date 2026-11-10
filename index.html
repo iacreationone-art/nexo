@@ -110,6 +110,11 @@
         <input id="search-input" type="search" placeholder="Pesquisar conversas" aria-label="Pesquisar conversas" autocomplete="off">
       </div>
 
+      <div class="conv-tabs" role="tablist" aria-label="Filtrar conversas">
+        <button type="button" id="tab-all" class="conv-tab" role="tab" aria-selected="true">Todas</button>
+        <button type="button" id="tab-fav" class="conv-tab" role="tab" aria-selected="false">⭐ Favoritos</button>
+      </div>
+
       <div id="install-banner" class="install-banner" hidden>
         <span id="install-text">Instale o Nexo na tela inicial</span>
         <button id="install-btn" class="btn btn-small">Instalar</button>
@@ -119,6 +124,7 @@
       <p id="swipe-hint" class="swipe-hint muted" hidden>Arraste uma conversa para a esquerda para apagar.</p>
       <ul id="conv-list" class="conv-list"></ul>
       <p id="search-empty" class="search-empty muted" hidden>Nenhuma conversa encontrada.</p>
+      <p id="fav-empty" class="search-empty muted" hidden>Nenhum favorito ainda.<br>Abra uma conversa, toque no nome do contato e em <strong>☆ Favoritar</strong>.</p>
       <div id="conv-empty" class="empty" hidden>
         <p>Nenhuma conversa ainda.</p>
         <button id="new-chat-empty" class="btn">Começar uma conversa</button>
@@ -326,6 +332,8 @@
         <small class="muted">E-mail</small>
         <strong id="contact-email"></strong>
       </div>
+
+      <button type="button" id="contact-fav" class="btn btn-outline contact-fav" aria-pressed="false">☆ Favoritar</button>
 
       <button type="button" id="contact-delete" class="btn-link danger contact-delete">Apagar conversa</button>
     </div>
