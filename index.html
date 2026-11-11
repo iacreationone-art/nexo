@@ -25,6 +25,7 @@
   <link rel="modulepreload" href="js/figurinhas.js">
   <link rel="modulepreload" href="js/salvas.js">
   <link rel="modulepreload" href="js/ligacao.js">
+  <link rel="modulepreload" href="js/toques.js">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/dist/umd/supabase.js"
           integrity="sha384-xPW3QHswsICVC2mW6BFNwMbhpLkbZ133fKOhxNx3QGGgAOJfL3O9t8r2aWn1aez6"
           crossorigin="anonymous" defer></script>
@@ -295,6 +296,16 @@
       </div>
     </div>
 
+    <div class="nm-title">Ligações</div>
+    <div class="nm-list">
+      <button type="button" class="nm-li" id="menu-ringtone">
+        <span class="nm-ico nm-ico-pink" aria-hidden="true">🎵</span>
+        <span class="nm-grow">Toque das ligações<small class="nm-sub">Filmes, desenhos, gospel e mais</small></span>
+        <span id="menu-ringtone-value" class="nm-value"></span>
+        <span class="nm-chev" aria-hidden="true">›</span>
+      </button>
+    </div>
+
     <div class="nm-title">App</div>
     <div class="nm-list">
       <button type="button" class="nm-li" id="menu-install" hidden>
@@ -489,6 +500,19 @@
       <button type="button" id="keys-other" class="btn-link" hidden></button>
       <button type="button" id="keys-logout" class="btn-link small">Sair da conta</button>
     </form>
+  </dialog>
+
+  <dialog id="ringtone-dialog" class="sheet nm-sheet" aria-labelledby="ringtone-title">
+    <header class="sheet-head">
+      <button type="button" class="icon-btn" id="ringtone-back" aria-label="Voltar">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M15.7 5.3a1 1 0 0 1 0 1.4L10.4 12l5.3 5.3a1 1 0 0 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z"/></svg>
+      </button>
+      <h3 id="ringtone-title">Toque das ligações</h3>
+    </header>
+    <p class="rt-hint">Toque num nome para ouvir e escolher. Toque de novo para parar.</p>
+    <div id="ringtone-list" role="radiogroup" aria-labelledby="ringtone-title"></div>
+    <p class="nm-foot">Só músicas livres (domínio público) e toques originais do Nexo.<br>
+      Com o Nexo fechado, o celular avisa com o som de notificação dele.</p>
   </dialog>
 
   <dialog id="call-screen" class="call-screen" aria-labelledby="call-name">
