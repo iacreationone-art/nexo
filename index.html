@@ -80,28 +80,7 @@
           </button>
         </div>
         <div class="menu-wrap">
-          <button id="me-btn" class="avatar-btn" title="Menu" aria-label="Abrir menu" aria-haspopup="menu" aria-expanded="false"></button>
-          <div id="user-menu" class="menu" role="menu" hidden>
-            <div class="menu-head">
-              <div id="menu-avatar" class="avatar"></div>
-              <div class="menu-who">
-                <strong id="menu-name"></strong>
-                <small id="menu-email" class="muted"></small>
-              </div>
-            </div>
-            <button type="button" role="menuitem" id="menu-profile" class="menu-item">
-              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5z"/></svg>
-              Meu perfil
-            </button>
-            <button type="button" role="menuitem" id="notify-btn" class="menu-item">
-              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.4-2h-4.8a2.5 2.5 0 0 0 2.4 2zm7-6V11a7 7 0 0 0-5.5-6.8V3.5a1.5 1.5 0 0 0-3 0v.7A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg>
-              <span id="notify-label">Ativar notificações</span>
-            </button>
-            <button type="button" role="menuitem" id="logout-btn" class="menu-item danger">
-              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M10 17l1.4-1.4-2.6-2.6H20v-2H8.8l2.6-2.6L10 7l-5 5zM4 5h7V3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7v-2H4z"/></svg>
-              Sair
-            </button>
-          </div>
+          <button id="me-btn" class="avatar-btn" title="Menu" aria-label="Abrir menu" aria-haspopup="dialog"></button>
         </div>
       </header>
 
@@ -119,6 +98,13 @@
         <span id="install-text">Instale o Nexo na tela inicial</span>
         <button id="install-btn" class="btn btn-small">Instalar</button>
         <button id="install-close" class="icon-btn" aria-label="Fechar">✕</button>
+      </div>
+
+      <div id="notify-banner" class="notify-banner" hidden>
+        <span class="notify-banner-ico" aria-hidden="true">🔔</span>
+        <span class="notify-banner-text"><strong>Não perca nenhuma mensagem</strong><small>Receba um aviso mesmo com o Nexo fechado.</small></span>
+        <button type="button" id="notify-banner-btn" class="btn btn-small">Ativar</button>
+        <button type="button" id="notify-banner-close" class="icon-btn" aria-label="Agora não">✕</button>
       </div>
 
       <p id="swipe-hint" class="swipe-hint muted" hidden>Arraste uma conversa para a esquerda para apagar.</p>
@@ -259,6 +245,95 @@
     </div>
   </dialog>
 
+  <dialog id="menu-dialog" class="sheet nm-sheet" aria-labelledby="menu-title">
+    <header class="sheet-head">
+      <button type="button" class="icon-btn" data-close aria-label="Voltar">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M15.7 5.3a1 1 0 0 1 0 1.4L10.4 12l5.3 5.3a1 1 0 0 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z"/></svg>
+      </button>
+      <h3 id="menu-title">Menu</h3>
+    </header>
+
+    <section class="nm-card">
+      <div class="nm-card-body">
+        <label class="nm-photo" title="Alterar foto" aria-label="Alterar foto">
+          <div id="menu-avatar" class="avatar nm-avatar"></div>
+          <span class="nm-photo-badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+          </span>
+          <input class="js-photo-input" type="file" accept="image/*" hidden>
+        </label>
+        <div class="nm-who">
+          <strong id="menu-name"></strong>
+          <span id="menu-email" class="nm-line"></span>
+          <span id="menu-about" class="nm-line nm-about"></span>
+        </div>
+      </div>
+      <button type="button" id="menu-profile" class="nm-edit">Editar perfil</button>
+    </section>
+
+    <div class="nm-title">Minha conta</div>
+    <div class="nm-list">
+      <label class="nm-li">
+        <span class="nm-ico nm-ico-blue" aria-hidden="true">📷</span>
+        <span class="nm-grow">Alterar foto<small class="nm-sub">Escolha uma foto da galeria ou tire uma agora</small></span>
+        <span class="nm-chev" aria-hidden="true">›</span>
+        <input class="js-photo-input" type="file" accept="image/*" hidden>
+      </label>
+      <button type="button" class="nm-li" id="menu-phone">
+        <span class="nm-ico nm-ico-green" aria-hidden="true">📞</span>
+        <span class="nm-grow">Telefone<small id="menu-phone-value" class="nm-sub"></small></span>
+        <span class="nm-chev" aria-hidden="true">›</span>
+      </button>
+      <div class="nm-li" id="menu-notify-row">
+        <span class="nm-ico nm-ico-amber" aria-hidden="true">🔔</span>
+        <label class="nm-grow" for="menu-notify">Notificações<small id="menu-notify-hint" class="nm-sub"></small></label>
+        <span class="nm-switch"><input type="checkbox" id="menu-notify" role="switch"><i aria-hidden="true"></i></span>
+      </div>
+    </div>
+
+    <div class="nm-title">App</div>
+    <div class="nm-list">
+      <button type="button" class="nm-li" id="menu-install" hidden>
+        <span class="nm-ico" aria-hidden="true">📲</span>
+        <span class="nm-grow">Instalar o Nexo<small class="nm-sub">Abre como aplicativo, direto da tela inicial</small></span>
+        <span class="nm-chev" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="nm-li" id="menu-theme">
+        <span class="nm-ico nm-ico-violet" aria-hidden="true">🌗</span>
+        <span class="nm-grow">Tema</span>
+        <span id="menu-theme-value" class="nm-value"></span>
+      </button>
+      <button type="button" class="nm-li nm-danger" id="logout-btn">
+        <span class="nm-ico nm-ico-red" aria-hidden="true">🚪</span>
+        <span class="nm-grow">Sair da conta</span>
+      </button>
+    </div>
+
+    <p class="nm-foot">Nexo · suas conversas protegidas de ponta a ponta 🔒</p>
+  </dialog>
+
+  <dialog id="phone-dialog" class="nm-small">
+    <form id="phone-form" method="dialog">
+      <div class="nm-small-ico" aria-hidden="true">📞</div>
+      <h3>Seu telefone</h3>
+      <p class="muted small nm-small-text">Com o número, seus contatos acham você no Nexo pela agenda do celular.</p>
+      <label>Telefone com DDD
+        <input id="phone-input" type="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 91234-5678">
+      </label>
+      <label class="check">
+        <input id="phone-visible" type="checkbox" checked>
+        <span>Permitir que meus contatos me encontrem e liguem por este número</span>
+      </label>
+      <p id="phone-msg" class="form-msg" role="status"></p>
+      <div class="dialog-actions">
+        <button type="button" id="phone-remove" class="btn-link danger" hidden>Remover</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn-link" data-close>Cancelar</button>
+        <button type="submit" class="btn">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="profile-dialog" class="sheet">
     <form id="profile-form" method="dialog">
       <header class="sheet-head">
@@ -273,7 +348,7 @@
           <div id="profile-avatar" class="avatar avatar-xl"></div>
           <label class="photo-btn" title="Trocar foto" aria-label="Trocar foto">
             <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
-            <input id="photo-input" type="file" accept="image/*" hidden>
+            <input id="photo-input" class="js-photo-input" type="file" accept="image/*" hidden>
           </label>
         </div>
         <button type="button" id="photo-remove" class="btn-link danger small">Remover foto</button>
